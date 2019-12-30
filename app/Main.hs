@@ -13,10 +13,10 @@ dumpPosEff :: EffectDef p -> EffectDef ()
 dumpPosEff (EffectDef _ name as) = EffectDef () name $ map dumpPosAction as
 
 dumpPosAction :: ActionDef p -> ActionDef ()
-dumpPosAction (ActionDef _ name args t) = ActionDef () name args t
+dumpPosAction (ActionDef _ name args) = ActionDef () name args
 
 dumpPosFun :: FunDef p -> FunDef ()
-dumpPosFun (FunDef _ name args effects t e) = FunDef () name args effects t $ dumpPos e
+dumpPosFun (FunDef _ name args e) = FunDef () name args $ dumpPos e
 
 dumpPos :: Expr p -> Expr ()
 dumpPos (EVar    _ x) = EVar () x
@@ -27,10 +27,10 @@ dumpPos (EString _ s) = EString () s
 dumpPos (ELambda _ x e) = ELambda () x $ dumpPos e
 dumpPos (EApp    _  e1 e2) = EApp () (dumpPos e1) $ dumpPos e2
 dumpPos (EIf     _ e1 e2 e3) = EIf () (dumpPos e1) (dumpPos e2) $ dumpPos e3
-dumpPos (ELet    _ x t e1 e2) = ELet () x t (dumpPos e1) $ dumpPos e2
+dumpPos (ELet    _ x e1 e2) = ELet () x (dumpPos e1) $ dumpPos e2
 dumpPos (EAction _ x e) = EAction () x $ dumpPos e
 dumpPos (EHandle _ e c) = EHandle () (dumpPos e) (dumpPosClause <$> c)
-dumpPos (EAnnot  _ e t) = EAnnot () (dumpPos e) t
+--dumpPos (EAnnot  _ e t) = EAnnot () (dumpPos e) t
 dumpPos (ETuple  _ es) = ETuple () $ dumpPos <$> es
 dumpPos (EBinOp  _ op e1 e2) = EBinOp  () op (dumpPos e1) $ dumpPos e2
 dumpPos (EUnOp   _ op e) = EUnOp () op $ dumpPos e

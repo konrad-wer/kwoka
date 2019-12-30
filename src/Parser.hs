@@ -43,8 +43,8 @@ parens = between (symbol "(") (symbol ")")
 braces :: Parser a -> Parser a
 braces = between (symbol "{") (symbol "}")
 
-angles :: Parser a -> Parser a
-angles = between (symbol "<") (symbol ">")
+-- angles :: Parser a -> Parser a
+-- angles = between (symbol "<") (symbol ">")
 
 rword :: String -> Parser ()
 rword w = (lexeme . try) (string w *> notFollowedBy alphaNumChar)
@@ -85,17 +85,17 @@ fun = do
   pos <- getSourcePos
   rword "fn"
   name <- identifier
-  args <- parens $ sepBy arg comma
-  effects <- option EffEmpty $ effectRow
-  annot <- option Nothing (symbol "::" >> Just <$> typeParser)
+  args <- parens $ sepBy identifier comma
+  -- effects <- option EffEmpty $ effectRow
+  -- annot <- option Nothing (symbol "::" >> Just <$> typeParser)
   body <- braces expr
-  return $ FunDef pos name args effects annot body
+  return $ FunDef pos name args body
 
-arg :: Parser Arg
-arg = do
-  name <- identifier
-  annot <- option Nothing (symbol "::"  >> Just <$> typeParser)
-  return (name, annot)
+-- arg :: Parser Arg
+-- arg = do
+--   name <- identifier
+--   annot <- option Nothing (symbol "::"  >> Just <$> typeParser)
+--   return (name, annot)
 
 binOpParser :: String -> Parser (Expr SourcePos -> Expr SourcePos -> Expr SourcePos)
 binOpParser x = do
@@ -142,21 +142,21 @@ eSimple =
   EInt    <$> getSourcePos <*> try (fromIntegral <$> unsignedInteger) <|>
   EVar    <$> getSourcePos <*> identifier <|>
   eHandle <|>
-  try (parens expr) <|>
-  eAnnot
+  try (parens expr)
+  -- eAnnot
 
-eAnnot :: Parser (Expr SourcePos)
-eAnnot = parens (do
-  pos <- getSourcePos
-  e <- expr
-  void $ symbol "::"
-  EAnnot pos e <$> typeParser)
+-- eAnnot :: Parser (Expr SourcePos)
+-- eAnnot = parens (do
+--   pos <- getSourcePos
+--   e <- expr
+--   void $ symbol "::"
+--   EAnnot pos e <$> typeParser)
 
 eLambda :: Parser (Expr SourcePos)
 eLambda = do
   pos <- getSourcePos
   void (symbol "\\" <|> symbol "λ")
-  args <- sepBy arg comma
+  args <- sepBy identifier comma
   void $ symbol "=>"
   ELambda pos args <$> expr
 
@@ -175,11 +175,11 @@ eLet = do
   pos <- getSourcePos
   rword "let"
   x <- identifier
-  annot <- option Nothing (symbol "::" >> Just <$> typeParser)
+  --annot <- option Nothing (symbol "::" >> Just <$> typeParser)
   void $ symbol "="
   e1 <- expr
   rword "in"
-  ELet pos x annot e1 <$> expr
+  ELet pos x e1 <$> expr
 
 eTuple :: Parser (Expr SourcePos)
 eTuple = parens (do
@@ -224,37 +224,37 @@ actionDef :: Parser (ActionDef SourcePos)
 actionDef = do
   pos <- getSourcePos
   name <- upperIdentifier
-  args <- parens $ sepBy arg comma
-  annot <- option Nothing (symbol "::" >> Just <$> typeParser)
-  return $ ActionDef pos name args annot
+  args <- parens $ sepBy identifier comma
+  --annot <- option Nothing (symbol "::" >> Just <$> typeParser)
+  return $ ActionDef pos name args
 
-typeParser :: Parser Type
-typeParser =  try tArrow <|> tSimple
+-- typeParser :: Parser Type
+-- typeParser =  try tArrow <|> tSimple
 
-tArrow :: Parser Type
-tArrow = do
-  t1 <- tSimple
-  void $ symbol "->"
-  effects <- option EffEmpty $ effectRow
-  TArrow t1 effects <$> typeParser
+-- tArrow :: Parser Type
+-- tArrow = do
+--   t1 <- tSimple
+--   void $ symbol "->"
+--   effects <- option EffEmpty $ effectRow
+--   TArrow t1 effects <$> typeParser
 
-tSimple :: Parser Type
-tSimple  =
-  (symbol "()" >> return TUnit) <|>
-  (rword "Bool" >> return TBool) <|>
-  (rword "Int" >> return TInt) <|>
-  (rword "String" >> return TInt) <|>
-  --(TVar <$> identifier) <|> TODO remove if unnecessary
-  parens typeParser
+-- tSimple :: Parser Type
+-- tSimple  =
+--   (symbol "()" >> return TUnit) <|>
+--   (rword "Bool" >> return TBool) <|>
+--   (rword "Int" >> return TInt) <|>
+--   (rword "String" >> return TInt) <|>
+--   --(TVar <$> identifier) <|> TODO remove if unnecessary
+--   parens typeParser
 
-effectRow :: Parser EffectRow
-effectRow = angles (do
-  labels <- sepBy upperIdentifier $ symbol ","
-  last   <- option EffEmpty (void (symbol ",") >> (effectVar <|> effectWild))
-  return $ foldr EffLabel last labels)
+-- effectRow :: Parser EffectRow
+-- effectRow = angles (do
+--   labels <- sepBy upperIdentifier $ symbol ","
+--   last   <- option EffEmpty (void (symbol ",") >> (effectVar <|> effectWild))
+--   return $ foldr EffLabel last labels)
 
-effectVar :: Parser EffectRow
-effectVar = EffVar <$> identifier
+-- effectVar :: Parser EffectRow
+-- effectVar = EffVar <$> identifier
 
-effectWild :: Parser EffectRow
-effectWild = symbol "_" >> return EffWild
+-- effectWild :: Parser EffectRow
+-- effectWild = symbol "_" >> return EffWild

@@ -4,12 +4,12 @@ import Data.List
 import qualified Data.Map as Map
 
 type Var = String
-type Arg = (Var, Maybe Type)
+--type Arg = (Var, Maybe Type)
 
 data TopLevelDef p = DefFun (FunDef p) | DefEff (EffectDef p)
-data FunDef p = FunDef p Var [Arg] EffectRow (Maybe Type) (Expr p)
+data FunDef p = FunDef p Var [Var] {-EffectRow (Maybe Type)-} (Expr p)
 data EffectDef p = EffectDef p Var [ActionDef p]
-data ActionDef p = ActionDef p Var [Arg] (Maybe Type)
+data ActionDef p = ActionDef p Var [Var]-- (Maybe Type)
 
 data UnOp = UnOpMinus | UnOpNot
 newtype BinOp = BinOp String
@@ -22,13 +22,13 @@ data Expr p
   | EString p String
   | EUnOp   p UnOp (Expr p)
   | EBinOp  p BinOp (Expr p) (Expr p)
-  | ELambda p [Arg] (Expr p)
+  | ELambda p [Var] (Expr p)
   | EApp    p (Expr p) (Expr p)
   | EIf     p (Expr p) (Expr p) (Expr p)
-  | ELet    p Var (Maybe Type) (Expr p) (Expr p)
+  | ELet    p Var (Expr p) (Expr p)
   | EAction p Var (Expr p)
   | EHandle p (Expr p) [Clause p]
-  | EAnnot  p (Expr p) Type
+--  | EAnnot  p (Expr p) Type
   | ETuple  p [Expr p]
 
 data Clause p  = Clause p Var [Var] (Expr p)
@@ -61,15 +61,15 @@ addAngles = ("<"++) . (++ ">")
 showIndent :: Int -> String
 showIndent = flip replicate ' ' . (* 2)
 
-showAnnot :: Maybe Type -> String
-showAnnot Nothing = ""
-showAnnot (Just t) = " :: " ++ show t
+-- showAnnot :: Maybe Type -> String
+-- showAnnot Nothing = ""
+-- showAnnot (Just t) = " :: " ++ show t
 
-showArg :: Arg -> String
-showArg (x, annot)= x ++ showAnnot annot
+-- showArg :: Arg -> String
+-- showArg (x, annot)= x ++ showAnnot annot
 
-showArgs :: [Arg] -> String
-showArgs = intercalate ", " . map showArg
+showArgs :: [Var] -> String
+showArgs = intercalate ", "
 
 instance Show Type where
   show (TVar a) = a
@@ -101,12 +101,12 @@ instance Show (EffectDef p) where
     "\n{" ++ (actions >>= ((("\n" ++ showIndent 1) ++) . show)) ++ "\n}"
 
 instance Show (ActionDef p) where
-  show (ActionDef _ name args returnType) = name ++ "(" ++ showArgs args ++ ")" ++ showAnnot returnType
+  show (ActionDef _ name args) = name ++ "(" ++ showArgs args ++ ")"
 
 instance Show (FunDef p) where
-  show (FunDef _ name args effects annot e) =
-    "fn " ++ name ++ addParens (showArgs args) ++ " " ++
-    show effects ++ "" ++ showAnnot annot ++
+  show (FunDef _ name args e) =
+    "fn " ++ name ++ addParens (showArgs args) ++
+    --show effects ++ "" ++ showAnnot annot ++
     "\n{\n" ++ showExpr 1 e ++ "\n}"
 
 instance Show (Clause p) where
@@ -140,15 +140,15 @@ showExpr indent = (showIndent indent ++) . s indent
         showIndent (i + 1) ++ s (i + 1) e1 ++ "\n" ++
       showIndent i ++ "else\n" ++
         showIndent (i + 1) ++ s (i + 1) e2
-    s i (ELet _ x t e1 e2) =
-      "let " ++ x ++ showAnnot t ++ " = " ++ s i e1 ++ " in\n" ++
+    s i (ELet _ x e1 e2) =
+      "let " ++ x ++ " = " ++ s i e1 ++ " in\n" ++
       showIndent i ++ s i e2
     s i (EAction _ a e) = a ++ s i e
     s i (EHandle _ e cs) = "handle(" ++ s i e ++ ")\n" ++
       showIndent i ++ "{\n" ++
       intercalate ",\n" (sc (i + 1) <$> cs) ++ "\n" ++
       showIndent i ++ "}"
-    s i (EAnnot _ e t) = addParens (s i e ++ showAnnot (return t))
+    --s i (EAnnot _ e t) = addParens (s i e ++ showAnnot (return t))
     s i (ETuple _ es) = addParens $ intercalate ", " $ map (s i) es
     sc i (Clause _ name args e) = showIndent i ++ name ++
       addParens (intercalate ", " args) ++ " => "  ++ s i e
