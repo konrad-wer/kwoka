@@ -135,7 +135,7 @@ eTerm =
 
 eSimple :: Parser (Expr SourcePos)
 eSimple =
-  EUnit   <$> getSourcePos <*  symbol "()" <|>
+  ETuple  <$> getSourcePos <*> pure [] <*  symbol "()" <|>
   EBool   <$> getSourcePos <*> (rword "True" >> return True) <|>
   EBool   <$> getSourcePos <*> (rword "False" >> return False) <|>
   EString <$> getSourcePos <*> stringLiteral <|>
@@ -182,13 +182,7 @@ eLet = do
   ELet pos x e1 <$> expr
 
 eTuple :: Parser (Expr SourcePos)
-eTuple = parens (do
-  pos <- getSourcePos
-  es <- sepBy expr comma
-  case es of
-    []  -> return $ EUnit pos
-    --[e] -> return e
-    _ -> return $ ETuple pos es)
+eTuple = parens (ETuple <$> getSourcePos <*> sepBy expr comma)
 
 eApp :: Parser (Expr SourcePos)
 eApp = EApp <$> getSourcePos <*> eSimple <*> eTuple

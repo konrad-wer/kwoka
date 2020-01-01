@@ -20,7 +20,6 @@ dumpPosFun (FunDef _ name args e) = FunDef () name args $ dumpPos e
 
 dumpPos :: Expr p -> Expr ()
 dumpPos (EVar    _ x) = EVar () x
-dumpPos (EUnit   _) = EUnit ()
 dumpPos (EBool   _ b) = EBool () b
 dumpPos (EInt    _ n) = EInt () n
 dumpPos (EString _ s) = EString () s

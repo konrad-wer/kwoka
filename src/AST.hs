@@ -16,7 +16,6 @@ newtype BinOp = BinOp String
 
 data Expr p
   = EVar    p Var
-  | EUnit   p
   | EBool   p Bool
   | EInt    p Integer
   | EString p String
@@ -37,12 +36,12 @@ type EffectEnv p = Map.Map String [ActionDef p]
 
 data Type
   = TVar Var
-  | TUnit
   | TBool
   | TInt
   | TString
   | TProduct [Type]
   | TArrow Type EffectRow Type
+  deriving Eq
 
 data TypeScheme = TypeScheme [Var] Type
 
@@ -50,7 +49,7 @@ data EffectRow
   = EffLabel Var EffectRow
   | EffEmpty
   | EffVar Var
-  | EffWild
+  deriving Eq
 
 addParens :: String -> String
 addParens = ("("++) . (++ ")")
@@ -73,7 +72,6 @@ showArgs = intercalate ", "
 
 instance Show Type where
   show (TVar a) = a
-  show TUnit = "()"
   show TBool = "Bool"
   show TInt = "Int"
   show TString = "String"
@@ -85,7 +83,6 @@ instance Show EffectRow where
     where
       toList EffEmpty = []
       toList (EffVar e) = [e]
-      toList EffWild = ["_"]
       toList (EffLabel l es) = l : toList es
 
 
@@ -127,7 +124,6 @@ showExpr :: Int -> Expr p -> String
 showExpr indent = (showIndent indent ++) . s indent
   where
     s _ (EVar _ x) = x
-    s _ EUnit {} = "()"
     s _ (EBool _ b) = show b
     s _ (EInt _ n) = show n
     s _ (EString _ str) = show str
@@ -152,3 +148,18 @@ showExpr indent = (showIndent indent ++) . s indent
     s i (ETuple _ es) = addParens $ intercalate ", " $ map (s i) es
     sc i (Clause _ name args e) = showIndent i ++ name ++
       addParens (intercalate ", " args) ++ " => "  ++ s i e
+
+getPos :: Expr p -> p
+getPos (EVar    p _) = p
+getPos (EBool   p _) = p
+getPos (EInt    p _) = p
+getPos (EString p _) = p
+getPos (EUnOp   p _ _) = p
+getPos (EBinOp  p _ _ _) = p
+getPos (ELambda p _ _) = p
+getPos (EApp    p _ _) = p
+getPos (EIf     p _ _ _) = p
+getPos (ELet    p _ _ _) = p
+getPos (EAction p _ _) = p
+getPos (EHandle p _ _) = p
+getPos (ETuple  p _) = p
