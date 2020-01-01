@@ -43,8 +43,8 @@ parens = between (symbol "(") (symbol ")")
 braces :: Parser a -> Parser a
 braces = between (symbol "{") (symbol "}")
 
--- angles :: Parser a -> Parser a
--- angles = between (symbol "<") (symbol ">")
+angles :: Parser a -> Parser a
+angles = between (symbol "<") (symbol ">")
 
 rword :: String -> Parser ()
 rword w = (lexeme . try) (string w *> notFollowedBy alphaNumChar)
@@ -86,16 +86,8 @@ fun = do
   rword "fn"
   name <- identifier
   args <- parens $ sepBy identifier comma
-  -- effects <- option EffEmpty $ effectRow
-  -- annot <- option Nothing (symbol "::" >> Just <$> typeParser)
   body <- braces expr
   return $ FunDef pos name args body
-
--- arg :: Parser Arg
--- arg = do
---   name <- identifier
---   annot <- option Nothing (symbol "::"  >> Just <$> typeParser)
---   return (name, annot)
 
 binOpParser :: String -> Parser (Expr SourcePos -> Expr SourcePos -> Expr SourcePos)
 binOpParser x = do
@@ -143,14 +135,6 @@ eSimple =
   EVar    <$> getSourcePos <*> identifier <|>
   eHandle <|>
   try (parens expr)
-  -- eAnnot
-
--- eAnnot :: Parser (Expr SourcePos)
--- eAnnot = parens (do
---   pos <- getSourcePos
---   e <- expr
---   void $ symbol "::"
---   EAnnot pos e <$> typeParser)
 
 eLambda :: Parser (Expr SourcePos)
 eLambda = do
@@ -175,7 +159,6 @@ eLet = do
   pos <- getSourcePos
   rword "let"
   x <- identifier
-  --annot <- option Nothing (symbol "::" >> Just <$> typeParser)
   void $ symbol "="
   e1 <- expr
   rword "in"
@@ -194,10 +177,11 @@ eHandle :: Parser (Expr SourcePos)
 eHandle = do
   pos <- getSourcePos
   rword "handle"
+  effName <- angles upperIdentifier
   e <- parens expr
   cs <- braces $ sepBy clause comma
   option () (void comma)
-  return $ EHandle pos e cs
+  return $ EHandle pos effName e cs
 
 clause :: Parser (Clause SourcePos)
 clause = do
@@ -219,36 +203,4 @@ actionDef = do
   pos <- getSourcePos
   name <- upperIdentifier
   args <- parens $ sepBy identifier comma
-  --annot <- option Nothing (symbol "::" >> Just <$> typeParser)
   return $ ActionDef pos name args
-
--- typeParser :: Parser Type
--- typeParser =  try tArrow <|> tSimple
-
--- tArrow :: Parser Type
--- tArrow = do
---   t1 <- tSimple
---   void $ symbol "->"
---   effects <- option EffEmpty $ effectRow
---   TArrow t1 effects <$> typeParser
-
--- tSimple :: Parser Type
--- tSimple  =
---   (symbol "()" >> return TUnit) <|>
---   (rword "Bool" >> return TBool) <|>
---   (rword "Int" >> return TInt) <|>
---   (rword "String" >> return TInt) <|>
---   --(TVar <$> identifier) <|> TODO remove if unnecessary
---   parens typeParser
-
--- effectRow :: Parser EffectRow
--- effectRow = angles (do
---   labels <- sepBy upperIdentifier $ symbol ","
---   last   <- option EffEmpty (void (symbol ",") >> (effectVar <|> effectWild))
---   return $ foldr EffLabel last labels)
-
--- effectVar :: Parser EffectRow
--- effectVar = EffVar <$> identifier
-
--- effectWild :: Parser EffectRow
--- effectWild = symbol "_" >> return EffWild
