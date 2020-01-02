@@ -1,5 +1,8 @@
 module Parser (parseProgram) where
 
+-- "You've never heard of the Millennium Falcon?
+-- …It's the ship that made the Kessel Run in less than 0.000012 megaParsecs."
+
 import Data.Void
 import Control.Monad
 import Text.Megaparsec
