@@ -2,8 +2,11 @@ module Main where
 
 import Parser
 import AST
+import ASTBuilder
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
+
+import qualified Data.Map as Map
 
 dumpPosDef :: TopLevelDef p -> TopLevelDef ()
 dumpPosDef (DefFun f) = DefFun $ dumpPosFun f
@@ -28,8 +31,7 @@ dumpPos (EApp    _  e1 e2) = EApp () (dumpPos e1) $ dumpPos e2
 dumpPos (EIf     _ e1 e2 e3) = EIf () (dumpPos e1) (dumpPos e2) $ dumpPos e3
 dumpPos (ELet    _ x e1 e2) = ELet () x (dumpPos e1) $ dumpPos e2
 dumpPos (EAction _ x e) = EAction () x $ dumpPos e
-dumpPos (EHandle _ e c) = EHandle () (dumpPos e) (dumpPosClause <$> c)
---dumpPos (EAnnot  _ e t) = EAnnot () (dumpPos e) t
+dumpPos (EHandle _ effName e c) = EHandle () effName (dumpPos e) (dumpPosClause <$> c)
 dumpPos (ETuple  _ es) = ETuple () $ dumpPos <$> es
 dumpPos (EBinOp  _ op e1 e2) = EBinOp  () op (dumpPos e1) $ dumpPos e2
 dumpPos (EUnOp   _ op e) = EUnOp () op $ dumpPos e
@@ -50,4 +52,4 @@ main = do
       sourceCode <- readFile filename
       case parseProgram filename sourceCode of
         Left err -> putStrLn $ errorBundlePretty err
-        Right ast -> putStrLn $ showProgram ast
+        Right ast -> mapM_ print $ Map.toList $ buildTypeEnv ast

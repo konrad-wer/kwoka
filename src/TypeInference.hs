@@ -14,10 +14,12 @@ import Control.Monad.State
 data TypeError p
   = TypesMismatchError p Type Type
   | UndeclaredVariableError p Var
+  | UndeclaredActionError p Var
   | RowsNotEqualError p EffectRow EffectRow
   | NoLabelInClosedRowError p Var EffectRow
   | CyclicSubstInRowError p EffectRow EffectRow
-  | CyclicSubstInTypeError p Var Type
+  | CyclicSubstInTypeError p TypeVar Type
+  | ProductArityMismatchError p Type Type
   deriving (Show)
 
 type TypeEnv =  Map.Map Var TypeScheme
@@ -31,7 +33,7 @@ data SubstObject
 inferError :: TypeError p -> InferState p a
 inferError = lift . Left
 
-type Subst = Map.Map Var SubstObject
+type Subst = Map.Map TypeVar SubstObject
 
 freshVar :: InferState p String
 freshVar = do
@@ -47,7 +49,7 @@ compose s1 s2 = apply s1 s2 `Map.union` s1
 
 class Substitutable a where
   apply :: Subst -> a -> a
-  fv    :: a -> Set.Set Var
+  fv    :: a -> Set.Set TypeVar
 
 instance Substitutable Type where
   apply _ TInt    = TInt
@@ -99,34 +101,34 @@ infer :: EffectEnv p -> TypeEnv -> Expr p -> InferState p (Type, EffectRow, Subs
 infer _ c (EVar p x) =
   case Map.lookup x c of
     Nothing -> inferError $ UndeclaredVariableError p x
-    Just scheme  -> do
+    Just scheme -> do
       t <- instantiate scheme
-      r <- EffVar <$> freshVar
+      r <- EffVar . E <$> freshVar
       return  (t, r, emptySubst)
-infer _ _ (EInt _ _)    = (\x -> (TInt, EffVar x, emptySubst)) <$> freshVar
-infer _ _ (EBool _ _)   = (\x -> (TBool, EffVar x, emptySubst)) <$> freshVar
-infer _ _ (EString _ _) = (\x -> (TString, EffVar x, emptySubst)) <$> freshVar
+infer _ _ (EInt _ _)    = (\x -> (TInt, EffVar . E $ x, emptySubst)) <$> freshVar
+infer _ _ (EBool _ _)   = (\x -> (TBool, EffVar . E $ x, emptySubst)) <$> freshVar
+infer _ _ (EString _ _) = (\x -> (TString, EffVar . E $ x, emptySubst)) <$> freshVar
 infer _ _ EBinOp {} = undefined
 infer effs c (EUnOp _ UnOpNot e) = do
-  r <- EffVar <$> freshVar
+  r <- EffVar . E <$> freshVar
   s <- check effs c e TBool r
   return (TBool, r, s)
 infer effs c (EUnOp _ UnOpMinus e) = do
-  r <- EffVar <$> freshVar
+  r <- EffVar . E <$> freshVar
   s <- check effs c e TInt r
   return (TInt, r, s)
 infer eff c (ELambda _ args e) = do
-  as <- mapM (const (TVar <$> freshVar)) args
+  as <- mapM (const (TVar . T <$> freshVar)) args
   let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) as
   (tr, r, s) <- infer eff c2 e
   let ta = apply s as
-  (\x -> (TArrow (TProduct ta) r tr, EffVar x, s)) <$> freshVar
+  (\x -> (TArrow (TProduct ta) r tr, EffVar . E $ x, s)) <$> freshVar
 infer eff c (EApp p e1 e2) = do
-  ta <- TVar <$> freshVar
-  tr <- EffVar <$> freshVar
-  tt <- TVar <$> freshVar
-  r <- EffVar <$> freshVar
-  r' <- EffVar <$> freshVar
+  ta <- TVar . T <$> freshVar
+  tr <- EffVar . E <$> freshVar
+  tt <- TVar . T <$> freshVar
+  r <- EffVar . E <$> freshVar
+  r' <- EffVar . E <$> freshVar
   s1 <- check eff c e1 (TArrow ta tr tt) r
   s2 <- check eff c e2 (apply s1 ta) r'
   s3 <- unifyRow p (apply (s2 `compose` s1 ) tr) (apply (s2 `compose` s1) r)
@@ -137,20 +139,32 @@ infer eff c (EApp p e1 e2) = do
   return (res_t, res_r, res_s)
 infer eff c (ETuple p es) = do
   ts <- mapM (infer eff c) es
-  tr <- EffVar  <$> freshVar
+  tr <- EffVar . E <$> freshVar
   (res_r, res_s) <- foldM (\(r1, s1) (_, r2, s2) -> do
     let s' = s2 `compose` s1
     s'' <- unifyRow p (apply s' r1) (apply s' r2)
     return (apply (s'' `compose` s') r2, s'' `compose` s')) (tr, emptySubst) ts
   return (TProduct $ apply res_s $ map (\(t, _, _) -> t) ts, res_r, res_s)
+infer eff c (EAction p name e) =
+  case Map.lookup name c of
+    Nothing -> inferError $ UndeclaredActionError p name
+    Just scheme -> do
+      t <- instantiate scheme
+      case t of
+        TArrow ta r tr -> do
+          r' <- EffVar . E <$> freshVar
+          s <- check eff c e ta r'
+          s' <- unifyRow p (apply s r) (apply s r')
+          let s'' = s' `compose` s
+          return (apply s'' tr, apply s'' r, s'')
+        _ -> error "Internal complier error, actions should have type TArrow, something went totally wrong"
+
 
 
 -- | EBinOp  p BinOp (Expr p) (Expr p)
 -- | EIf     p (Expr p) (Expr p) (Expr p)
 -- | ELet    p Var (Maybe Type) (Expr p) (Expr p)
--- | EAction p Var (Expr p)
 -- | EHandle p (Expr p) [Clause p]
--- | ETuple  p [Expr p]
 
 check :: EffectEnv p -> TypeEnv -> Expr p -> Type -> EffectRow -> InferState p Subst
 check effs c e t r = do
@@ -160,9 +174,12 @@ check effs c e t r = do
 
 instantiate :: TypeScheme -> InferState p Type
 instantiate (TypeScheme as t) = do
-  as' <- mapM (fmap (TypeSubst . TVar) . const freshVar) as
+  as' <- mapM aux as
   let s = Map.fromList $ zip as as'
   return $ apply s t
+    where
+      aux (T _) = TypeSubst . TVar . T <$> freshVar
+      auz (E _) = EffSubst . EffVar . E <$> freshVar
 
 unify :: p -> Type -> Type -> InferState p Subst
 unify _ TBool TBool = return emptySubst
@@ -172,13 +189,15 @@ unify p (TArrow t1 r t2) (TArrow t1' r' t2') = do
   s <- unify p t1 t1'
   s' <- compose <$> unifyRow p (apply s r) (apply s r') <*> pure s
   compose <$> unify p (apply s' t2) (apply s' t2') <*> pure s'
-unify p (TProduct ts1) (TProduct ts2) =
-  foldM (\s (t1, t2) -> compose <$> unify p (apply s t1) (apply s t2) <*> pure s) emptySubst $ zip ts1 ts2
+unify p (TProduct ts1) (TProduct ts2)
+  | length ts1 /= length ts2 = inferError $ ProductArityMismatchError p (TProduct ts1) (TProduct ts2)
+  | otherwise =
+    foldM (\s (t1, t2) -> compose <$> unify p (apply s t1) (apply s t2) <*> pure s) emptySubst $ zip ts1 ts2
 unify p (TVar a) t = bind p a t
 unify p t (TVar a) = bind p a t
 unify p t1 t2 = inferError $ TypesMismatchError p t1 t2
 
-bind :: p -> Var -> Type -> InferState p Subst
+bind :: p -> TypeVar -> Type -> InferState p Subst
 bind p a t
   | t == TVar a = return emptySubst
   | a `Set.member` fv t = inferError $ CyclicSubstInTypeError p a t
@@ -227,7 +246,5 @@ rewriteRow p label row = do
       | l == l' = return $ Just (foldr EffLabel r acc, emptySubst)
       | otherwise = rewrite (acc ++ [l']) l r
     rewrite acc l (EffVar a) = do
-      b <- EffVar <$> freshVar
+      b <- EffVar . E <$> freshVar
       return $ Just (foldr EffLabel b acc, Map.singleton a (EffSubst $ EffLabel l b))
-
--- (EffLabel "a" . EffLabel "b"  . EffLabel "c"  . EffLabel "d" $ EffEmpty)

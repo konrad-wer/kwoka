@@ -4,12 +4,11 @@ import Data.List
 import qualified Data.Map as Map
 
 type Var = String
---type Arg = (Var, Maybe Type)
 
 data TopLevelDef p = DefFun (FunDef p) | DefEff (EffectDef p)
-data FunDef p = FunDef p Var [Var] {-EffectRow (Maybe Type)-} (Expr p)
+data FunDef p = FunDef p Var [Var] (Expr p)
 data EffectDef p = EffectDef p Var [ActionDef p]
-data ActionDef p = ActionDef p Var [Var]-- (Maybe Type)
+data ActionDef p = ActionDef p Var [Var]
 
 data UnOp = UnOpMinus | UnOpNot
 newtype BinOp = BinOp String
@@ -33,8 +32,10 @@ data Clause p  = Clause p Var [Var] (Expr p)
 
 type EffectEnv p = Map.Map String [ActionDef p]
 
+data TypeVar = T Var | E Var deriving (Eq, Ord)
+
 data Type
-  = TVar Var
+  = TVar TypeVar
   | TBool
   | TInt
   | TString
@@ -42,12 +43,12 @@ data Type
   | TArrow Type EffectRow Type
   deriving Eq
 
-data TypeScheme = TypeScheme [Var] Type
+data TypeScheme = TypeScheme [TypeVar] Type
 
 data EffectRow
   = EffLabel Var EffectRow
   | EffEmpty
-  | EffVar Var
+  | EffVar TypeVar
   deriving Eq
 
 addParens :: String -> String
@@ -59,18 +60,15 @@ addAngles = ("<"++) . (++ ">")
 showIndent :: Int -> String
 showIndent = flip replicate ' ' . (* 2)
 
--- showAnnot :: Maybe Type -> String
--- showAnnot Nothing = ""
--- showAnnot (Just t) = " :: " ++ show t
-
--- showArg :: Arg -> String
--- showArg (x, annot)= x ++ showAnnot annot
-
 showArgs :: [Var] -> String
 showArgs = intercalate ", "
 
+instance Show TypeVar where
+  show (T a) = a
+  show (E a) = a
+
 instance Show Type where
-  show (TVar a) = a
+  show (TVar a) = show a
   show TBool = "Bool"
   show TInt = "Int"
   show TString = "String"
@@ -81,9 +79,11 @@ instance Show EffectRow where
   show r = addAngles $ intercalate ", " $ toList r
     where
       toList EffEmpty = []
-      toList (EffVar e) = [e]
+      toList (EffVar (E e)) = [e]
       toList (EffLabel l es) = l : toList es
 
+instance Show TypeScheme where
+  show (TypeScheme vars t) = "∀ " ++ intercalate ", " (map show vars) ++ " . " ++ show t
 
 showProgram :: [TopLevelDef p] -> String
 showProgram = intercalate "\n\n" . map show
@@ -102,7 +102,6 @@ instance Show (ActionDef p) where
 instance Show (FunDef p) where
   show (FunDef _ name args e) =
     "fn " ++ name ++ addParens (showArgs args) ++
-    --show effects ++ "" ++ showAnnot annot ++
     "\n{\n" ++ showExpr 1 e ++ "\n}"
 
 instance Show (Clause p) where
@@ -143,7 +142,6 @@ showExpr indent = (showIndent indent ++) . s indent
       showIndent i ++ "{\n" ++
       intercalate ",\n" (sc (i + 1) <$> cs) ++ "\n" ++
       showIndent i ++ "}"
-    --s i (EAnnot _ e t) = addParens (s i e ++ showAnnot (return t))
     s i (ETuple _ es) = addParens $ intercalate ", " $ map (s i) es
     sc i (Clause _ name args e) = showIndent i ++ name ++
       addParens (intercalate ", " args) ++ " => "  ++ s i e
