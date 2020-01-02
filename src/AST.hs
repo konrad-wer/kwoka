@@ -80,6 +80,7 @@ instance Show EffectRow where
     where
       toList EffEmpty = []
       toList (EffVar (E e)) = [e]
+      toList (EffVar (T _)) = error "Internal complier error, effect var cannot be a T var"
       toList (EffLabel l es) = l : toList es
 
 instance Show TypeScheme where

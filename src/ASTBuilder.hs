@@ -16,7 +16,7 @@ buildTypeEnv topLevelDefs =
     bte :: [TopLevelDef p] -> State Int (Map.Map String TypeScheme)
     bte [] = return Map.empty
     bte (DefEff (EffectDef _ name actions) : defs) = do
-      let names = map (\(ActionDef _ name _) -> name) actions
+      let names = map (\(ActionDef _ nm _) -> nm) actions
       ts <- mapM (buildActionType name) actions
       res <- bte defs
       return $ foldr (uncurry Map.insert) res $ zip names ts
