@@ -1,43 +1,11 @@
 module Main where
 
 import Parser
-import AST
 import ASTBuilder
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
 
 import qualified Data.Map as Map
-
-dumpPosDef :: TopLevelDef p -> TopLevelDef ()
-dumpPosDef (DefFun f) = DefFun $ dumpPosFun f
-dumpPosDef (DefEff e) = DefEff $ dumpPosEff e
-
-dumpPosEff :: EffectDef p -> EffectDef ()
-dumpPosEff (EffectDef _ name as) = EffectDef () name $ map dumpPosAction as
-
-dumpPosAction :: ActionDef p -> ActionDef ()
-dumpPosAction (ActionDef _ name args) = ActionDef () name args
-
-dumpPosFun :: FunDef p -> FunDef ()
-dumpPosFun (FunDef _ name args e) = FunDef () name args $ dumpPos e
-
-dumpPos :: Expr p -> Expr ()
-dumpPos (EVar    _ x) = EVar () x
-dumpPos (EBool   _ b) = EBool () b
-dumpPos (EInt    _ n) = EInt () n
-dumpPos (EString _ s) = EString () s
-dumpPos (ELambda _ x e) = ELambda () x $ dumpPos e
-dumpPos (EApp    _  e1 e2) = EApp () (dumpPos e1) $ dumpPos e2
-dumpPos (EIf     _ e1 e2 e3) = EIf () (dumpPos e1) (dumpPos e2) $ dumpPos e3
-dumpPos (ELet    _ x e1 e2) = ELet () x (dumpPos e1) $ dumpPos e2
-dumpPos (EAction _ x e) = EAction () x $ dumpPos e
-dumpPos (EHandle _ effName e c) = EHandle () effName (dumpPos e) (dumpPosClause <$> c)
-dumpPos (ETuple  _ es) = ETuple () $ dumpPos <$> es
-dumpPos (EBinOp  _ op e1 e2) = EBinOp  () op (dumpPos e1) $ dumpPos e2
-dumpPos (EUnOp   _ op e) = EUnOp () op $ dumpPos e
-
-dumpPosClause :: Clause a -> Clause ()
-dumpPosClause (Clause _ name args e) = Clause () name args (dumpPos e)
 
 readArgs :: [a] -> Maybe a
 readArgs [] = Nothing
