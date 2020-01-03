@@ -259,7 +259,8 @@ openedActionsTypes = Map.fromList
   [("Raise", TypeScheme [] (TArrow (TProduct [TVar $ T "$0"]) (EffLabel "Exc" . EffVar $ E "$1") $ TVar $ T "$2")),
    ("Read", TypeScheme [] (TArrow (TProduct []) (EffLabel "IO" . EffVar $ E "$3") $ TVar $ T "$4")),
    ("RaiseRet", TypeScheme []
-   (TArrow (TProduct [TVar $ T "$5", TVar $ T "$6"]) (EffLabel "Exc" . EffVar $ E "$7") $ TVar $ T "$8"))]
+   (TArrow (TProduct [TVar $ T "$5", TVar $ T "$6"]) (EffLabel "Exc" . EffVar $ E "$7") $ TVar $ T "$8")),
+   ("Foo", TypeScheme [] (TArrow (TProduct [TVar $ T "$9"]) (EffLabel "Bar" . EffVar $ E "$10") $ TVar $ T "$11"))]
 
 checkTypeTest1 :: Test
 checkTypeTest1 =
@@ -406,6 +407,104 @@ checkTypeTest20 =
     Left (ProductArityMismatchError () (TProduct [TVar _, TVar _]) (TProduct [TInt, TBool, TString])) -> True
     _ -> False
 
+checkTypeTest21 :: Test
+checkTypeTest21 =
+  case flip evalStateT 0 $ check Map.empty Map.empty
+      (EIf () (EBool () True) (EInt () 42) (EInt () 44)) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest22 :: Test
+checkTypeTest22 =
+  case flip evalStateT 0 $ check Map.empty Map.empty
+      (EIf () (EBool () True) (EInt () 42) (EBool () True)) TInt EffEmpty of
+    Left (TypesMismatchError () TInt TBool) -> True
+    _ -> False
+
+checkTypeTest23 :: Test
+checkTypeTest23 =
+  case flip evalStateT 0 $ check Map.empty Map.empty
+      (EIf () (EInt () 59) (EInt () 42) (EInt () 44)) TInt EffEmpty of
+    Left (TypesMismatchError () TBool TInt) -> True
+    _ -> False
+
+checkTypeTest24 :: Test
+checkTypeTest24 =
+  case flip evalStateT 0 $ check Map.empty openedActionsTypes
+      (EIf () (EBool () True) (EAction () "Raise" (ETuple() [EInt () 42]))
+                              (EAction () "Read" (ETuple() []))) TInt
+                              (EffLabel "IO" (EffLabel "Exc" EffEmpty)) of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest25 :: Test
+checkTypeTest25 =
+  case flip evalStateT 0 $ check Map.empty openedActionsTypes
+      (EIf () (EAction () "Foo" (ETuple() [EInt () 42]))
+      (EAction () "Raise" (ETuple() [EInt () 42]))
+      (EAction () "Read" (ETuple() []))) TInt
+      (EffLabel "IO" (EffLabel "Exc" EffEmpty)) of
+    Left (RowsNotEqualError () EffEmpty (EffLabel "Bar" (EffVar _))) -> True
+    _ -> False
+
+checkTypeTest26 :: Test
+checkTypeTest26 =
+  case flip evalStateT 0 $ check Map.empty openedActionsTypes
+      (EIf () (EAction () "Foo" (ETuple() [EInt () 42]))
+      (EAction () "Raise" (ETuple() [EInt () 42]))
+      (EAction () "Read" (ETuple() []))) TInt
+      (EffLabel "IO" (EffLabel "Exc" (EffLabel "Bar" EffEmpty))) of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest27 :: Test
+checkTypeTest27 =
+  case flip evalStateT 0 $ check Map.empty
+      (Map.fromList [("+", TypeScheme [E "%4"] $ TArrow (TProduct [TInt, TInt]) (EffVar $ E "%4") TInt)])
+      (EBinOp () (BinOp "+") (EInt () 44) (EInt () 42)) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest28 :: Test
+checkTypeTest28 =
+  case flip evalStateT 0 $ check Map.empty
+      (Map.fromList [("+", TypeScheme [E "%4"] $ TArrow (TProduct [TInt, TInt]) (EffVar $ E "%4") TInt),
+                     ("*", TypeScheme [E "%1"] $ TArrow (TProduct [TInt, TInt]) (EffVar $ E "%1") TInt)])
+                    (EBinOp () (BinOp "+")  (EBinOp () (BinOp "*") (EInt () 44) (EInt () 42)) (EInt () 42))
+                    TInt (EffLabel "IO" EffEmpty) of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest29 :: Test
+checkTypeTest29 =
+  case flip evalStateT 0 $ check Map.empty
+      (Map.fromList [("==", TypeScheme [T "%6", E "%7"] $ TArrow (TProduct [TVar $ T "%6", TVar $ T "%6"]) (EffVar $ E "%7") TBool),
+                     ("!=", TypeScheme [T "%8", E "%9"] $ TArrow (TProduct [TVar $ T "%8", TVar $ T "%8"]) (EffVar $ E "%9") TBool)])
+                    (EBinOp () (BinOp "!=")  (EBinOp () (BinOp "==") (EInt () 44) (EInt () 42)) (EBool () True))
+                    TBool (EffLabel "IO" EffEmpty) of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest30 :: Test
+checkTypeTest30 =
+  case flip evalStateT 0 $ check Map.empty
+      (Map.fromList [("==", TypeScheme [T "%6", E "%7"] $ TArrow (TProduct [TVar $ T "%6", TVar $ T "%6"]) (EffVar $ E "%7") TBool),
+                     ("!=", TypeScheme [T "%8", E "%9"] $ TArrow (TProduct [TVar $ T "%8", TVar $ T "%8"]) (EffVar $ E "%9") TBool)])
+                    (EBinOp () (BinOp "!=")  (EBinOp () (BinOp "==") (EInt () 44) (EInt () 42)) (EInt () 42))
+                    TBool (EffLabel "IO" EffEmpty) of
+    Left (TypesMismatchError () TBool TInt) -> True
+    _ -> False
+
+checkTypeTest31 :: Test
+checkTypeTest31 =
+  case flip evalStateT 0 $ check Map.empty
+      (Map.fromList [("==", TypeScheme [T "%6", E "%7"] $ TArrow (TProduct [TVar $ T "%6", TVar $ T "%6"]) (EffVar $ E "%7") TBool),
+                     ("!=", TypeScheme [T "%8", E "%9"] $ TArrow (TProduct [TVar $ T "%8", TVar $ T "%8"]) (EffVar $ E "%9") TBool)])
+                    (EBinOp () (BinOp "!=")  (EBinOp () (BinOp "==") (EString () "Name") (EInt () 44)) (EBool () True))
+                    TBool (EffLabel "IO" EffEmpty) of
+    Left (TypesMismatchError () TString TInt) -> True
+    _ -> False
+
 tests :: [(TestName, Test)]
 tests = [("rewriteRowTest1", rewriteRowTest1),
          ("rewriteRowTest2", rewriteRowTest2),
@@ -462,7 +561,18 @@ tests = [("rewriteRowTest1", rewriteRowTest1),
          ("checkTypeTest17", checkTypeTest17),
          ("checkTypeTest18", checkTypeTest18),
          ("checkTypeTest19", checkTypeTest19),
-         ("checkTypeTest20", checkTypeTest20)]
+         ("checkTypeTest20", checkTypeTest20),
+         ("checkTypeTest21", checkTypeTest21),
+         ("checkTypeTest22", checkTypeTest22),
+         ("checkTypeTest23", checkTypeTest23),
+         ("checkTypeTest24", checkTypeTest24),
+         ("checkTypeTest25", checkTypeTest25),
+         ("checkTypeTest26", checkTypeTest26),
+         ("checkTypeTest27", checkTypeTest27),
+         ("checkTypeTest28", checkTypeTest28),
+         ("checkTypeTest29", checkTypeTest29),
+         ("checkTypeTest30", checkTypeTest30),
+         ("checkTypeTest31", checkTypeTest31)]
 
 runTest :: (TestName, Test) -> String
 runTest (name, t) =

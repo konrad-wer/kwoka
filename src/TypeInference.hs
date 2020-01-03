@@ -108,7 +108,8 @@ infer _ c (EVar p x) =
 infer _ _ (EInt _ _)    = (\x -> (TInt, EffVar . E $ x, emptySubst)) <$> freshVar
 infer _ _ (EBool _ _)   = (\x -> (TBool, EffVar . E $ x, emptySubst)) <$> freshVar
 infer _ _ (EString _ _) = (\x -> (TString, EffVar . E $ x, emptySubst)) <$> freshVar
-infer _ _ EBinOp {} = undefined
+infer eff c (EBinOp p (BinOp op) e1 e2) =
+  infer eff c (EApp p (EVar p op) (ETuple p [e1, e2]))
 infer effs c (EUnOp _ UnOpNot e) = do
   r <- EffVar . E <$> freshVar
   s <- check effs c e TBool r
@@ -158,12 +159,16 @@ infer eff c (EAction p name e) =
           let s'' = s' `compose` s
           return (apply s'' tr, apply s'' r, s'')
         _ -> error "Internal complier error, actions should have type TArrow, something went totally wrong"
+infer eff c (EIf p e0 e1 e2) = do
+  cr <- EffVar . E <$> freshVar
+  s1 <- check eff c e0 TBool cr
+  (t, tr, s2) <- infer eff c e1
+  let s2' = s2 `compose` s1
+  s3 <- compose <$> unifyRow p (apply s2' cr) (apply s2' tr) <*> pure s2'
+  s4 <- compose <$> check eff c e2 (apply s3 t) (apply s3 tr) <*> pure s3
+  return (apply s4 t, apply s4 tr, s4)
 
-
-
--- | EBinOp  p BinOp (Expr p) (Expr p)
--- | EIf     p (Expr p) (Expr p) (Expr p)
--- | ELet    p Var (Maybe Type) (Expr p) (Expr p)
+-- | ELet    p Var (Expr p) (Expr p)
 -- | EHandle p (Expr p) [Clause p]
 
 check :: EffectEnv p -> TypeEnv -> Expr p -> Type -> EffectRow -> InferState p Subst
@@ -179,7 +184,7 @@ instantiate (TypeScheme as t) = do
   return $ apply s t
     where
       aux (T _) = TypeSubst . TVar . T <$> freshVar
-      auz (E _) = EffSubst . EffVar . E <$> freshVar
+      aux (E _) = EffSubst . EffVar . E <$> freshVar
 
 unify :: p -> Type -> Type -> InferState p Subst
 unify _ TBool TBool = return emptySubst
