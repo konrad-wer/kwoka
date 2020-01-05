@@ -182,17 +182,25 @@ eHandle = do
   rword "handle"
   effName <- angles upperIdentifier
   e <- parens expr
-  cs <- braces $ sepBy clause comma
+  cs <- braces $ sepBy (clause <|> returnClause) comma
   option () (void comma)
   return $ EHandle pos effName e cs
 
 clause :: Parser (Clause SourcePos)
 clause = do
   pos <- getSourcePos
-  name <- upperIdentifier <|> symbol "return"
+  name <- upperIdentifier
   args <- parens $ sepBy identifier comma
   void $ symbol "=>"
   Clause pos name args <$> expr
+
+returnClause :: Parser (Clause SourcePos)
+returnClause = do
+  pos <- getSourcePos
+  name <- symbol "return"
+  arg <- parens identifier
+  void $ symbol "=>"
+  Clause pos name [arg] <$> expr
 
 effectDef :: Parser (EffectDef SourcePos)
 effectDef = do
@@ -205,5 +213,28 @@ actionDef :: Parser (ActionDef SourcePos)
 actionDef = do
   pos <- getSourcePos
   name <- upperIdentifier
-  args <- parens $ sepBy identifier comma
-  return $ ActionDef pos name args
+  args <- parens $ sepBy typeParser comma
+  annot <- option Nothing (symbol "::" >> Just <$> typeParser)
+  return $ ActionDef pos name args annot
+
+typeParser :: Parser Type
+typeParser =  try tArrow <|> tSimple
+
+tArrow :: Parser Type
+tArrow = do
+  ta <- TProduct <$> parens (sepBy typeParser (symbol ","))
+  void $ symbol "->"
+  effects <- option EffEmpty effectRow
+  TArrow ta effects <$> typeParser
+
+tSimple :: Parser Type
+tSimple  =
+  (rword "Bool" >> return TBool) <|>
+  (rword "Int" >> return TInt) <|>
+  (rword "String" >> return TInt) <|>
+  parens typeParser
+
+effectRow :: Parser EffectRow
+effectRow = angles (do
+  labels <- sepBy upperIdentifier $ symbol ","
+  return $ foldr EffLabel EffEmpty labels)

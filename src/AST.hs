@@ -8,7 +8,7 @@ type Var = String
 data TopLevelDef p = DefFun (FunDef p) | DefEff (EffectDef p)
 data FunDef p = FunDef p Var [Var] (Expr p)
 data EffectDef p = EffectDef p Var [ActionDef p]
-data ActionDef p = ActionDef p Var [Var]
+data ActionDef p = ActionDef p Var [Type] (Maybe Type)
 
 data UnOp = UnOpMinus | UnOpNot
 newtype BinOp = BinOp String
@@ -98,7 +98,7 @@ instance Show (EffectDef p) where
     "\n{" ++ (actions >>= ((("\n" ++ showIndent 1) ++) . show)) ++ "\n}"
 
 instance Show (ActionDef p) where
-  show (ActionDef _ name args) = name ++ "(" ++ showArgs args ++ ")"
+  show (ActionDef _ name args annot) = name ++ "(" ++ intercalate "," (map show args) ++ ")" ++ showAnnot annot
 
 instance Show (FunDef p) where
   show (FunDef _ name args e) =
@@ -115,6 +115,10 @@ instance Show UnOp where
 
 instance Show BinOp where
   show (BinOp op) = op
+
+showAnnot :: Maybe Type -> String
+showAnnot Nothing = ""
+showAnnot (Just t) = " :: " ++ show t
 
 instance Show (Expr p) where
   show = showExpr 0

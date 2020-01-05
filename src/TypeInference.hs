@@ -9,17 +9,21 @@ import AST
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.List as List
 import Control.Monad.State
 
 data TypeError p
   = TypesMismatchError p Type Type
   | UndeclaredVariableError p Var
   | UndeclaredActionError p Var
+  | UndeclaredEffectError p Var
   | RowsNotEqualError p EffectRow EffectRow
   | NoLabelInClosedRowError p Var EffectRow
   | CyclicSubstInRowError p EffectRow EffectRow
   | CyclicSubstInTypeError p TypeVar Type
   | ProductArityMismatchError p Type Type
+  | HandleActionsMismatchError p [Var] [Var]
+  | ActionArityMismatchError p Int Int
   deriving (Show)
 
 type TypeEnv =  Map.Map Var TypeScheme
@@ -143,8 +147,8 @@ infer eff c (ETuple p es) = do
   tr <- EffVar . E <$> freshVar
   (res_r, res_s) <- foldM (\(r1, s1) (_, r2, s2) -> do
     let s' = s2 `compose` s1
-    s'' <- unifyRow p (apply s' r1) (apply s' r2)
-    return (apply (s'' `compose` s') r2, s'' `compose` s')) (tr, emptySubst) ts
+    s'' <- compose <$> unifyRow p (apply s' r1) (apply s' r2) <*> pure s'
+    return (apply s'' r2, s'')) (tr, emptySubst) ts
   return (TProduct $ apply res_s $ map (\(t, _, _) -> t) ts, res_r, res_s)
 infer eff c (EAction p name e) =
   case Map.lookup name c of
@@ -167,9 +171,63 @@ infer eff c (EIf p e0 e1 e2) = do
   s3 <- compose <$> unifyRow p (apply s2' cr) (apply s2' tr) <*> pure s2'
   s4 <- compose <$> check eff c e2 (apply s3 t) (apply s3 tr) <*> pure s3
   return (apply s4 t, apply s4 tr, s4)
+infer eff c (ELet p x e1 e2) = do
+  (tx, rx, s1) <- infer eff c e1
+  let c' = apply s1 c
+  let c2 = Map.insert x (generalize c' tx) c'
+  (t, r, s2) <- infer eff c2 e2
+  let s2' = s2 `compose` s1
+  s3 <- compose <$> unifyRow p rx r <*> pure s2'
+  return (apply s3 t, apply s3 r, s3)
+infer eff c (EHandle p effName e clauses) =
+  case Map.lookup effName eff of
+    Nothing -> inferError $ UndeclaredEffectError p effName
+    Just actions -> do
+      let actionNames = List.sort $ "return" : map getActionName actions
+      let clauseNames = List.sort $ map getClauseName clauses
+      if actionNames /= clauseNames then
+        inferError $ HandleActionsMismatchError p actionNames clauseNames
+      else do
+        (tx, r1, s1) <- infer eff c e
+        (r2, s2) <- rewriteRow p effName (apply s1 r1)
+        let s2' = s2 `compose` s1
+        ts <- mapM (const (TVar . T <$> freshVar)) clauses
+        rs <- mapM (const (EffVar . E <$> freshVar)) clauses
+        t0 <- TVar . T <$> freshVar
+        r0 <- EffVar . E <$> freshVar
+        clsSubsts <- mapM (\(cl, tr, r) -> checkClause p eff actions cl tx tr r) $ zip3 clauses ts rs
+        let clsTypes = zipWith apply clsSubsts ts
+        let clsRows = zipWith apply clsSubsts rs
+        let s3 = foldl1 compose clsSubsts
+        (tr, s4) <- foldM (\(tPrev, s) t -> do
+          s' <- compose <$> unify p (apply s tPrev) (apply s t) <*> pure s
+          return (apply s' t, s')) (t0, s3) clsTypes
+        (r, s5) <- foldM (\(rPrev, s) r -> do
+          s' <- compose <$> unifyRow p (apply s rPrev) (apply s r) <*> pure s
+          return (apply s' r, s')) (r0, s4) clsRows
+        return (apply s5 tr, apply s5 r, s5)
+  where
+    getActionName (ActionDef _ name _ _ ) = name
+    getClauseName (Clause _ name _ _) = name
 
--- | ELet    p Var (Expr p) (Expr p)
--- | EHandle p (Expr p) [Clause p]
+    checkClause :: p -> EffectEnv p -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
+    checkClause pos effEnv actions (Clause _ name args e) retArgType t r =
+      case List.find ((==) name . getActionName) actions of
+        Nothing -> check effEnv (Map.insert (head args) (TypeScheme [] retArgType) c) e t r
+        Just (ActionDef _ _ argTypes resumeType) -> do
+          c2 <- extendEnv pos c args argTypes resumeType t
+          check effEnv c2 e t r
+
+    extendEnv :: p -> TypeEnv -> [Var] -> [Type] -> Maybe Type -> Type ->  InferState p TypeEnv
+    extendEnv pos context args argTypes resumeArgType retType
+      | length args /= length argTypes =
+        inferError $ ActionArityMismatchError pos (length argTypes) (length args)
+      | otherwise = do
+        let c2 = foldr (uncurry Map.insert) context $ zip args $ map (TypeScheme []) argTypes
+        case resumeArgType of
+          Nothing -> return c2
+          Just rt -> return $ Map.insert "resume" (TypeScheme [] $ TArrow rt EffEmpty retType) c2
+
 
 check :: EffectEnv p -> TypeEnv -> Expr p -> Type -> EffectRow -> InferState p Subst
 check effs c e t r = do
@@ -181,10 +239,31 @@ instantiate :: TypeScheme -> InferState p Type
 instantiate (TypeScheme as t) = do
   as' <- mapM aux as
   let s = Map.fromList $ zip as as'
-  return $ apply s t
+  apply s <$> open t
     where
       aux (T _) = TypeSubst . TVar . T <$> freshVar
       aux (E _) = EffSubst . EffVar . E <$> freshVar
+
+open :: Type -> InferState p Type
+open (TArrow t1 r t2) = TArrow <$> open t1 <*> openRow r <*> open t2
+open t = return t
+
+openRow :: EffectRow -> InferState p EffectRow
+openRow EffEmpty = EffVar . E <$> freshVar
+openRow (EffLabel l r) = EffLabel l <$> openRow r
+openRow r = return r
+
+generalize :: TypeEnv -> Type -> TypeScheme
+generalize c t = TypeScheme (Set.elems $ fv (close t) `Set.difference` fv c) (close t)
+
+close :: Type -> Type
+close (TArrow t1 r t2) = TArrow (close t1) (closeRow r) (close t2)
+close t = t
+
+closeRow :: EffectRow -> EffectRow
+closeRow (EffVar _) = EffEmpty
+closeRow (EffLabel l r) = EffLabel l $ closeRow r
+closeRow r = r
 
 unify :: p -> Type -> Type -> InferState p Subst
 unify _ TBool TBool = return emptySubst
