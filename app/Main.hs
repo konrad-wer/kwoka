@@ -2,10 +2,9 @@ module Main where
 
 import Parser
 import ASTBuilder
+import TypeInference
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
-
-import qualified Data.Map as Map
 
 readArgs :: [a] -> Maybe a
 readArgs [] = Nothing
@@ -20,4 +19,4 @@ main = do
       sourceCode <- readFile filename
       case parseProgram filename sourceCode of
         Left err -> putStrLn $ errorBundlePretty err
-        Right ast -> mapM_ print $ Map.toList $ buildTypeEnv ast
+        Right ast -> print $ checkProgram (buildEffectEnv ast) (buildTypeEnv ast) (getFuns ast)

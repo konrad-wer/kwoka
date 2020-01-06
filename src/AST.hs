@@ -31,6 +31,7 @@ data Expr p
 data Clause p  = Clause p Var [Var] (Expr p)
 
 type EffectEnv p = Map.Map String [ActionDef p]
+type TypeEnv =  Map.Map Var TypeScheme
 
 data TypeVar = T Var | E Var deriving (Eq, Ord)
 

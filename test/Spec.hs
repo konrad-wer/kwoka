@@ -3,6 +3,7 @@ import ASTBuilder
 import TypeInference
 import Control.Monad.State
 import qualified Data.Map as Map
+import qualified Data.List as List
 
 type Test = Bool
 type TestName = String
@@ -247,6 +248,12 @@ unifyTest22 =
                             (TProduct [TInt, TProduct [TInt, TProduct []], TArrow TInt EffEmpty TInt])) 0 of
     Left (ProductArityMismatchError () (TProduct [TInt]) (TProduct [TInt, TProduct []])) -> True
     _ -> False
+
+effEnv :: EffectEnv ()
+effEnv = Map.fromList
+  [("Exc", [ActionDef () "Raise" [TString] Nothing, ActionDef () "RaiseRet" [TString, TInt] Nothing]),
+   ("IO", [ActionDef () "Read" [] $ Just TInt]),
+   ("Bar", [ActionDef () "Foo" [TInt] $ Just TBool])]
 
 actionsTypes :: TypeEnv
 actionsTypes = Map.fromList
@@ -526,6 +533,141 @@ checkTypeTest35 =
     Right _ -> True
     _ -> False
 
+checkTypeTest36 :: Test
+checkTypeTest36 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "Exc" (EAction () "Raise" (ETuple() [EString () "42"]))
+       [Clause () "return" ["x"] (EInt () 5)]) TInt EffEmpty of
+    Left (HandleActionsMismatchError () l1 l2) -> List.sort l1 == ["Raise", "RaiseRet", "return"] &&
+                                                  List.sort l2 == ["return"]
+    _ -> False
+
+checkTypeTest37 :: Test
+checkTypeTest37 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "Exc" (EAction () "Raise" (ETuple() [EString () "42"]))
+       [Clause () "return" ["x"] (EInt () 5), Clause () "Raise" ["x"] (EInt () 44)]) TInt EffEmpty of
+    Left (HandleActionsMismatchError () l1 l2) -> List.sort l1 == ["Raise", "RaiseRet", "return"] &&
+                                                  List.sort l2 == ["Raise", "return"]
+    _ -> False
+
+checkTypeTest38 :: Test
+checkTypeTest38 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "Exc" (EAction () "Raise" (ETuple() [EString () "42"]))
+       [Clause () "return" ["x"] (EInt () 5), Clause () "Raise" ["x"] (EInt () 44),
+        Clause () "RaiseRet" ["x", "y"] (EInt () 44)]) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest39 :: Test
+checkTypeTest39 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "Exc" (EAction () "Raise" (ETuple() [EString () "42"]))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Raise" ["x"] (EInt () 44),
+        Clause () "RaiseRet" ["x", "y"] (EInt () 44)]) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest40 :: Test
+checkTypeTest40 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "Exc" (EAction () "Raise" (ETuple() [EString () "42"]))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Raise" ["x"] (EInt () 44),
+        Clause () "RaiseRet" ["x", "y"] (EString () "44")]) TInt EffEmpty of
+    Left (TypesMismatchError () TInt TString) -> True
+    _ -> False
+
+checkTypeTest41 :: Test
+checkTypeTest41 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (EAction () "Read" (ETuple() []))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Read" [] (EInt () 44)]) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest42 :: Test
+checkTypeTest42 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (EAction () "Read" (ETuple() []))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Read" [] (EString () "44")]) TInt EffEmpty of
+    Left (TypesMismatchError () TInt TString) -> True
+    _ -> False
+
+checkTypeTest43 :: Test
+checkTypeTest43 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Read" [] (EString () "44")]) TString EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest44 :: Test
+checkTypeTest44 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EVar () "x"), Clause () "Raise" ["x"] (EInt () 44),
+        Clause () "RaiseRet" ["x", "y"] (EInt () 44)]) TString EffEmpty of
+    Left (HandleActionsMismatchError () l1 l2) -> List.sort l1 == ["Read", "return"] &&
+                                                  List.sort l2 == ["Raise", "RaiseRet", "return"]
+    _ -> False
+
+checkTypeTest45 :: Test
+checkTypeTest45 =
+  case flip evalStateT 0 $ check effEnv (Map.union binOpTypes actionsTypes)
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EBinOp () (BinOp "+") (EInt () 42) (EVar () "x")),
+        Clause () "Read" [] (EString () "44")]) TString EffEmpty of
+    Left _ -> True
+    _ -> False
+
+checkTypeTest46 :: Test
+checkTypeTest46 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EVar () "x"),
+        Clause () "Read" [] (EApp () (EVar () "resume") (EInt () 44))]) TString EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest47 :: Test
+checkTypeTest47 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EVar () "x"),
+        Clause () "Read" [] (EApp () (EVar () "resume") (EBool () True))]) TString EffEmpty of
+    Left (TypesMismatchError () TInt TBool) -> True
+    _ -> False
+
+checkTypeTest48 :: Test
+checkTypeTest48 =
+  case flip evalStateT 0 $ check effEnv actionsTypes
+       (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
+       [Clause () "return" ["x"] (EVar () "x"),
+        Clause () "Read" [] (EUnOp () UnOpNot (EApp () (EVar () "resume") (EInt () 44)))]) TString EffEmpty of
+    Left (TypesMismatchError () TString TBool) -> True
+    _ -> False
+
+checkTypeTest49 :: Test
+checkTypeTest49 =
+  case flip evalStateT 0 $ check effEnv (Map.union binOpTypes actionsTypes)
+       (EHandle () "Bar" (ELet () "x" (EAction () "Foo" (ETuple() [EInt () 44]))
+       (EBinOp () (BinOp "&&") (EVar () "x") (EBool () True)))
+       [Clause () "return" ["x"] (EVar () "x"),
+        Clause () "Foo" ["x"] (EApp () (EVar () "resume")(EBool () False))]) TBool EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest50 :: Test
+checkTypeTest50 =
+  case flip evalStateT 0 $ check effEnv (Map.union binOpTypes actionsTypes)
+       (EHandle () "Bar" (ELet () "x" (EAction () "Foo" (ETuple() [EInt () 44]))
+       (EBinOp () (BinOp "&&") (EVar () "x") (EBool () True)))
+       [Clause () "return" ["x"] (EAction () "Read" (ETuple() [])),
+        Clause () "Foo" ["x"] (EAction () "Raise" (ETuple() [EString () "44"]))]) TInt EffEmpty of
+    Left (RowsNotEqualError () EffEmpty (EffLabel _ (EffLabel _ (EffVar _)))) -> True
+    _ -> False
+
 tests :: [(TestName, Test)]
 tests = [("rewriteRowTest1", rewriteRowTest1),
          ("rewriteRowTest2", rewriteRowTest2),
@@ -597,7 +739,22 @@ tests = [("rewriteRowTest1", rewriteRowTest1),
          ("checkTypeTest32", checkTypeTest32),
          ("checkTypeTest33", checkTypeTest33),
          ("checkTypeTest34", checkTypeTest34),
-         ("checkTypeTest35", checkTypeTest35)]
+         ("checkTypeTest35", checkTypeTest35),
+         ("checkTypeTest36", checkTypeTest36),
+         ("checkTypeTest37", checkTypeTest37),
+         ("checkTypeTest38", checkTypeTest38),
+         ("checkTypeTest39", checkTypeTest39),
+         ("checkTypeTest40", checkTypeTest40),
+         ("checkTypeTest41", checkTypeTest41),
+         ("checkTypeTest42", checkTypeTest42),
+         ("checkTypeTest43", checkTypeTest43),
+         ("checkTypeTest44", checkTypeTest44),
+         ("checkTypeTest45", checkTypeTest45),
+         ("checkTypeTest46", checkTypeTest46),
+         ("checkTypeTest47", checkTypeTest47),
+         ("checkTypeTest48", checkTypeTest48),
+         ("checkTypeTest49", checkTypeTest49),
+         ("checkTypeTest50", checkTypeTest50)]
 
 runTest :: (TestName, Test) -> String
 runTest (name, t) =

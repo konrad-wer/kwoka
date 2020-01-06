@@ -25,11 +25,11 @@ binOpTypes = Map.fromList
    ("&&", TypeScheme [] $ TArrow (TProduct [TBool, TBool]) EffEmpty TBool),
    ("||", TypeScheme [] $ TArrow (TProduct [TBool, TBool]) EffEmpty TBool)]
 
-buildTypeEnv :: [TopLevelDef p] -> Map.Map String TypeScheme
+buildTypeEnv :: [TopLevelDef p] -> TypeEnv
 buildTypeEnv topLevelDefs =
   Map.union binOpTypes $ flip evalState 0 $ bte topLevelDefs
   where
-    bte :: [TopLevelDef p] -> State Int (Map.Map String TypeScheme)
+    bte :: [TopLevelDef p] -> State Int TypeEnv
     bte [] = return Map.empty
     bte (DefEff (EffectDef _ name actions) : defs) = do
       let names = map (\(ActionDef _ nm _ _) -> nm) actions
@@ -50,3 +50,8 @@ buildTypeEnv topLevelDefs =
       n <- get
       modify (+1)
       return ("$" ++ show n)
+
+getFuns :: [TopLevelDef p] -> [FunDef p]
+getFuns [] = []
+getFuns (DefFun f : defs) = f : getFuns defs
+getFuns (_ : defs) = getFuns defs

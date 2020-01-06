@@ -26,7 +26,6 @@ data TypeError p
   | ActionArityMismatchError p Int Int
   deriving (Show)
 
-type TypeEnv =  Map.Map Var TypeScheme
 type InferState p = StateT Int (Either (TypeError p))
 
 data SubstObject
@@ -100,6 +99,19 @@ instance Substitutable SubstObject where
   apply s (TypeSubst t) = TypeSubst $ apply s t
   fv (EffSubst e) = fv e
   fv (TypeSubst t) = fv t
+
+checkProgram :: EffectEnv p -> TypeEnv -> [FunDef p] -> Either (TypeError p) ()
+checkProgram eff c funs =  void $ flip evalStateT 0 $
+  foldM (\cPrev fun@(FunDef _ name _ _) -> Map.insert name <$> inferFunDef eff cPrev fun <*> pure cPrev) c funs
+
+inferFunDef :: EffectEnv p -> TypeEnv -> FunDef p -> InferState p TypeScheme
+inferFunDef eff c (FunDef p name args body) = do
+  ta <- mapM (const (TVar . T <$> freshVar)) args
+  tr <- TVar . T <$> freshVar
+  r <-  EffVar . E <$> freshVar
+  let t = TArrow (TProduct ta) r tr
+  s <- check eff (Map.insert name (TypeScheme [] t) c) (ELambda p args body) t EffEmpty
+  return $ generalize c $ apply s t
 
 infer :: EffectEnv p -> TypeEnv -> Expr p -> InferState p (Type, EffectRow, Subst)
 infer _ c (EVar p x) =
@@ -194,27 +206,27 @@ infer eff c (EHandle p effName e clauses) =
         ts <- mapM (const (TVar . T <$> freshVar)) clauses
         rs <- mapM (const (EffVar . E <$> freshVar)) clauses
         t0 <- TVar . T <$> freshVar
-        r0 <- EffVar . E <$> freshVar
-        clsSubsts <- mapM (\(cl, tr, r) -> checkClause p eff actions cl tx tr r) $ zip3 clauses ts rs
+        clsSubsts <- mapM (\(cl, tr, r) -> checkClause eff actions cl tx tr r) $ zip3 clauses ts rs
         let clsTypes = zipWith apply clsSubsts ts
         let clsRows = zipWith apply clsSubsts rs
+        let clsPos = map (\(Clause pos _ _ _) -> pos) clauses
         let s3 = foldl1 compose clsSubsts
-        (tr, s4) <- foldM (\(tPrev, s) t -> do
-          s' <- compose <$> unify p (apply s tPrev) (apply s t) <*> pure s
-          return (apply s' t, s')) (t0, s3) clsTypes
-        (r, s5) <- foldM (\(rPrev, s) r -> do
-          s' <- compose <$> unifyRow p (apply s rPrev) (apply s r) <*> pure s
-          return (apply s' r, s')) (r0, s4) clsRows
+        (tr, s4) <- foldM (\(tPrev, s) (t, pos) -> do
+          s' <- compose <$> unify pos (apply s tPrev) (apply s t) <*> pure s
+          return (apply s' t, s')) (t0, s3) $ zip clsTypes clsPos
+        (r, s5) <- foldM (\(rPrev, s) (r, pos) -> do
+          s' <- compose <$> unifyRow pos (apply s rPrev) (apply s r) <*> pure s
+          return (apply s' r, s')) (r2, s4) $ zip clsRows clsPos
         return (apply s5 tr, apply s5 r, s5)
   where
     getActionName (ActionDef _ name _ _ ) = name
     getClauseName (Clause _ name _ _) = name
 
-    checkClause :: p -> EffectEnv p -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
-    checkClause pos effEnv actions (Clause _ name args e) retArgType t r =
+    checkClause :: EffectEnv p -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
+    checkClause effEnv actions (Clause _ name args e) retArgType t r =
       case List.find ((==) name . getActionName) actions of
         Nothing -> check effEnv (Map.insert (head args) (TypeScheme [] retArgType) c) e t r
-        Just (ActionDef _ _ argTypes resumeType) -> do
+        Just (ActionDef pos _ argTypes resumeType) -> do
           c2 <- extendEnv pos c args argTypes resumeType t
           check effEnv c2 e t r
 
