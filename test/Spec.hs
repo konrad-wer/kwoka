@@ -225,28 +225,28 @@ unifyTest18 =
 unifyTest19 :: Test
 unifyTest19 =
   case evalStateT (unify () (TProduct []) (TProduct [TInt])) 0 of
-    Left (ProductArityMismatchError () (TProduct []) (TProduct [TInt])) -> True
+    Left (TypesMismatchError () (TProduct []) (TProduct [TInt])) -> True
     _ -> False
 
 unifyTest20 :: Test
 unifyTest20 =
   case evalStateT (unify () (TProduct [TInt, TBool, TArrow TInt EffEmpty TInt, TString, TProduct []])
                             (TProduct [TInt, TBool, TArrow TInt EffEmpty TInt])) 0 of
-    Left (ProductArityMismatchError () (TProduct [TInt, TBool, TArrow TInt EffEmpty TInt, TString, TProduct []])
+    Left (TypesMismatchError () (TProduct [TInt, TBool, TArrow TInt EffEmpty TInt, TString, TProduct []])
                                        (TProduct [TInt, TBool, TArrow TInt EffEmpty TInt])) -> True
     _ -> False
 
 unifyTest21 :: Test
 unifyTest21 =
   case evalStateT (unify () (TProduct [TProduct [TProduct [TProduct [TInt]]]]) (TProduct [TProduct [TProduct []]])) 0 of
-    Left (ProductArityMismatchError () (TProduct [TProduct [TInt]]) (TProduct [])) -> True
+    Left (TypesMismatchError () (TProduct [TProduct [TInt]]) (TProduct [])) -> True
     _ -> False
 
 unifyTest22 :: Test
 unifyTest22 =
   case evalStateT (unify () (TProduct [TInt, TProduct [TInt], TArrow TInt EffEmpty TInt])
                             (TProduct [TInt, TProduct [TInt, TProduct []], TArrow TInt EffEmpty TInt])) 0 of
-    Left (ProductArityMismatchError () (TProduct [TInt]) (TProduct [TInt, TProduct []])) -> True
+    Left (TypesMismatchError () (TProduct [TInt]) (TProduct [TInt, TProduct []])) -> True
     _ -> False
 
 effEnv :: EffectEnv ()
@@ -322,7 +322,7 @@ checkTypeTest9 :: Test
 checkTypeTest9 =
   case flip evalStateT 0 $ check Map.empty actionsTypes
       (EAction () "Read" (ETuple() [EBool () True])) TInt (EffLabel "IO" EffEmpty) of
-    Left (ProductArityMismatchError () (TProduct []) (TProduct [TBool])) -> True
+    Left (TypesMismatchError () (TProduct []) (TProduct [TBool])) -> True
     _ -> False
 
 checkTypeTest10 :: Test
@@ -399,7 +399,7 @@ checkTypeTest19 =
   case flip evalStateT 0 $ check Map.empty actionsTypes
        (EAction () "RaiseRet" (ETuple() [EInt () 44]))
        TInt (EffLabel "IO" (EffLabel "Exc" EffEmpty))  of
-    Left (ProductArityMismatchError () (TProduct [TString, TInt]) (TProduct [TInt])) -> True
+    Left (TypesMismatchError () (TProduct [TString, TInt]) (TProduct [TInt])) -> True
     _ -> False
 
 checkTypeTest20 :: Test
@@ -407,7 +407,7 @@ checkTypeTest20 =
   case flip evalStateT 0 $ check Map.empty actionsTypes
        (EAction () "RaiseRet" (ETuple() [EInt () 44, EBool () True, EString () "Bestrafer"]))
        TInt (EffLabel "IO" (EffLabel "Exc" EffEmpty))  of
-    Left (ProductArityMismatchError () (TProduct [TString, TInt]) (TProduct [TInt, TBool, TString])) -> True
+    Left (TypesMismatchError () (TProduct [TString, TInt]) (TProduct [TInt, TBool, TString])) -> True
     _ -> False
 
 checkTypeTest21 :: Test

@@ -1,4 +1,5 @@
 {-# LANGUAGE  FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 
 module TypeInference where
 
@@ -9,8 +10,9 @@ import AST
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.List as List
+import Data.List
 import Control.Monad.State
+import Text.Megaparsec.Pos
 
 data TypeError p
   = TypesMismatchError p Type Type
@@ -21,10 +23,31 @@ data TypeError p
   | NoLabelInClosedRowError p Var EffectRow
   | CyclicSubstInRowError p EffectRow EffectRow
   | CyclicSubstInTypeError p TypeVar Type
-  | ProductArityMismatchError p Type Type
   | HandleActionsMismatchError p [Var] [Var]
   | ActionArityMismatchError p Int Int
-  deriving (Show)
+
+addQuotes :: String -> String
+addQuotes = ("'" ++) . (++ "'")
+
+instance SourcePos ~ p => Show (TypeError p) where
+  show (TypesMismatchError p t1 t2) = sourcePosPretty p ++ "\nCouldn't match expected type " ++ addQuotes (show t1) ++
+    " with actual type " ++ addQuotes (show t2)
+  show (UndeclaredVariableError p x) = sourcePosPretty p ++ "\nVariable not in scope: " ++ addQuotes x
+  show (UndeclaredActionError p a) = sourcePosPretty p ++ "\nUndefined action: " ++ addQuotes a
+  show (UndeclaredEffectError p e) = sourcePosPretty p ++ "\nUndefined effect: " ++ addQuotes e
+  show (RowsNotEqualError p r1 r2) = sourcePosPretty p ++ "\nCouldn't match effect row " ++ addQuotes (show r1) ++
+    " with effect row " ++ addQuotes (show r2)
+  show (NoLabelInClosedRowError p l r) = sourcePosPretty p ++ "\nCouldn't find effect label " ++ addQuotes (show l) ++
+    " in the effect row " ++ addQuotes (show r)
+  show (CyclicSubstInRowError p r1 r2) = sourcePosPretty p ++ "\nFound cyclic substitution while trying to unify effect row " ++
+    addQuotes (show r1) ++ " with effect row " ++ addQuotes (show r2)
+  show (CyclicSubstInTypeError p t1 t2) = sourcePosPretty p ++ "\nFound cyclic substitution while trying to unify type " ++
+    addQuotes (show t1) ++ " with type " ++ addQuotes (show t2)
+  show (HandleActionsMismatchError p actions clauses) =
+    sourcePosPretty p ++ "\nCouldn't match expected action handlers: " ++ intercalate ", " (map addQuotes actions) ++
+    " with actual action handlers: " ++  intercalate ", " (map addQuotes clauses)
+  show (ActionArityMismatchError p n1 n2) = sourcePosPretty p ++ "\nCouldn't match expected action arity " ++ show n1 ++
+    " with actual action handler arity " ++ show n2
 
 type InferState p = StateT Int (Either (TypeError p))
 
@@ -147,21 +170,26 @@ infer eff c (EApp p e1 e2) = do
   r <- EffVar . E <$> freshVar
   r' <- EffVar . E <$> freshVar
   s1 <- check eff c e1 (TArrow ta tr tt) r
-  s2 <- check eff c e2 (apply s1 ta) r'
-  s3 <- unifyRow p (apply (s2 `compose` s1 ) tr) (apply (s2 `compose` s1) r)
-  s4 <- unifyRow p (apply (s3 `compose` s2 `compose` s1) r) (apply (s3 `compose` s2 `compose` s1) r')
-  let res_s = s4 `compose` s3 `compose` s2 `compose` s1
-  let res_t = apply res_s tt
-  let res_r = apply res_s tr
-  return (res_t, res_r, res_s)
-infer eff c (ETuple p es) = do
-  ts <- mapM (infer eff c) es
+  s2 <- compose <$> check eff (apply s1 c) e2 (apply s1 ta) r' <*> pure s1
+  s3 <- compose <$> unifyRow p (apply s2 tr) (apply s2 r) <*> pure s2
+  s4 <- compose <$>  unifyRow p (apply s3 r) (apply s3 r') <*> pure s3
+  let res_t = apply s4 tt
+  let res_r = apply s4 tr
+  return (res_t, res_r, s4)
+infer eff c (ETuple p elems) = do
+  (ts, s1) <- inferElems eff emptySubst [] elems
   tr <- EffVar . E <$> freshVar
-  (res_r, res_s) <- foldM (\(r1, s1) (_, r2, s2) -> do
-    let s' = s2 `compose` s1
-    s'' <- compose <$> unifyRow p (apply s' r1) (apply s' r2) <*> pure s'
-    return (apply s'' r2, s'')) (tr, emptySubst) ts
-  return (TProduct $ apply res_s $ map (\(t, _, _) -> t) ts, res_r, res_s)
+  (res_r, res_s) <- foldM (\(r1, sPrev) (_, r2) -> do
+    s <- compose <$> unifyRow p (apply sPrev r1) (apply sPrev r2) <*> pure sPrev
+    return (apply s r2, s)) (tr, s1) ts
+  return (TProduct $ apply res_s $ map fst ts, res_r, res_s)
+  where
+    inferElems :: EffectEnv p -> Subst -> [(Type, EffectRow)] -> [Expr p] -> InferState p ([(Type, EffectRow)], Subst)
+    inferElems _ sPrev acc [] = return (acc, sPrev)
+    inferElems effEnv sPrev acc (e : es) = do
+      (t, r, s) <- infer effEnv (apply sPrev c) e
+      let s' = s `compose` sPrev
+      inferElems effEnv s' (acc ++ [(apply s' t, apply s' r)]) es
 infer eff c (EAction p name e) =
   case Map.lookup name c of
     Nothing -> inferError $ UndeclaredActionError p name
@@ -178,10 +206,10 @@ infer eff c (EAction p name e) =
 infer eff c (EIf p e0 e1 e2) = do
   cr <- EffVar . E <$> freshVar
   s1 <- check eff c e0 TBool cr
-  (t, tr, s2) <- infer eff c e1
+  (t, tr, s2) <- infer eff (apply s1 c) e1
   let s2' = s2 `compose` s1
   s3 <- compose <$> unifyRow p (apply s2' cr) (apply s2' tr) <*> pure s2'
-  s4 <- compose <$> check eff c e2 (apply s3 t) (apply s3 tr) <*> pure s3
+  s4 <- compose <$> check eff (apply s3 c) e2 (apply s3 t) (apply s3 tr) <*> pure s3
   return (apply s4 t, apply s4 tr, s4)
 infer eff c (ELet p x e1 e2) = do
   (tx, rx, s1) <- infer eff c e1
@@ -195,8 +223,8 @@ infer eff c (EHandle p effName e clauses) =
   case Map.lookup effName eff of
     Nothing -> inferError $ UndeclaredEffectError p effName
     Just actions -> do
-      let actionNames = List.sort $ "return" : map getActionName actions
-      let clauseNames = List.sort $ map getClauseName clauses
+      let actionNames = sort $ "return" : map getActionName actions
+      let clauseNames = sort $ map getClauseName clauses
       if actionNames /= clauseNames then
         inferError $ HandleActionsMismatchError p actionNames clauseNames
       else do
@@ -206,7 +234,7 @@ infer eff c (EHandle p effName e clauses) =
         ts <- mapM (const (TVar . T <$> freshVar)) clauses
         rs <- mapM (const (EffVar . E <$> freshVar)) clauses
         t0 <- TVar . T <$> freshVar
-        clsSubsts <- mapM (\(cl, tr, r) -> checkClause eff actions cl tx tr r) $ zip3 clauses ts rs
+        clsSubsts <- mapM (\(cl, tr, r) -> checkClause eff (apply s2 c) actions cl tx tr r) $ zip3 clauses ts rs
         let clsTypes = zipWith apply clsSubsts ts
         let clsRows = zipWith apply clsSubsts rs
         let clsPos = map (\(Clause pos _ _ _) -> pos) clauses
@@ -222,12 +250,12 @@ infer eff c (EHandle p effName e clauses) =
     getActionName (ActionDef _ name _ _ ) = name
     getClauseName (Clause _ name _ _) = name
 
-    checkClause :: EffectEnv p -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
-    checkClause effEnv actions (Clause _ name args ec) retArgType t r =
-      case List.find ((==) name . getActionName) actions of
+    checkClause :: EffectEnv p -> TypeEnv -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
+    checkClause effEnv context actions (Clause _ name args ec) retArgType t r =
+      case find ((==) name . getActionName) actions of
         Nothing -> check effEnv (Map.insert (head args) (TypeScheme [] retArgType) c) ec t r
         Just (ActionDef pos _ argTypes resumeType) -> do
-          c2 <- extendEnv pos c args argTypes resumeType t
+          c2 <- extendEnv pos context args argTypes resumeType t
           check effEnv c2 ec t r
 
     extendEnv :: p -> TypeEnv -> [Var] -> [Type] -> Maybe Type -> Type ->  InferState p TypeEnv
@@ -286,7 +314,7 @@ unify p (TArrow t1 r t2) (TArrow t1' r' t2') = do
   s' <- compose <$> unifyRow p (apply s r) (apply s r') <*> pure s
   compose <$> unify p (apply s' t2) (apply s' t2') <*> pure s'
 unify p (TProduct ts1) (TProduct ts2)
-  | length ts1 /= length ts2 = inferError $ ProductArityMismatchError p (TProduct ts1) (TProduct ts2)
+  | length ts1 /= length ts2 = inferError $ TypesMismatchError p (TProduct ts1) (TProduct ts2)
   | otherwise =
     foldM (\s (t1, t2) -> compose <$> unify p (apply s t1) (apply s t2) <*> pure s) emptySubst $ zip ts1 ts2
 unify p (TVar a) t = bind p a t

@@ -1,6 +1,7 @@
 module Main where
 
 import Parser
+import AST
 import ASTBuilder
 import TypeInference
 import System.Environment
@@ -19,4 +20,6 @@ main = do
       sourceCode <- readFile filename
       case parseProgram filename sourceCode of
         Left err -> putStrLn $ errorBundlePretty err
-        Right ast -> print $ checkProgram (buildEffectEnv ast) (buildTypeEnv ast) (getFuns ast)
+        Right ast -> case checkProgram (buildEffectEnv ast) (buildTypeEnv ast) (getFuns ast) of
+          Left err -> print err
+          _ -> putStrLn $ showProgram ast
