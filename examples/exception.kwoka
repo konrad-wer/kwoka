@@ -1,0 +1,21 @@
+effect Exc
+{
+  Raise(String)
+}
+
+fn saveDiv(n, m)
+{
+  if m == 0 then
+    Raise("Division by zero")
+  else
+    n / m
+}
+
+fn main()
+{
+  handle<Exc>(saveDiv(4, 5))
+  {
+    return(x) => x,
+    Raise(s) => -1
+  }
+}
