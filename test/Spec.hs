@@ -626,7 +626,7 @@ checkTypeTest46 =
   case flip evalStateT 0 $ check effEnv actionsTypes
        (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
        [Clause () "return" ["x"] (EVar () "x"),
-        Clause () "Read" [] (EApp () (EVar () "resume") (EInt () 44))]) TString EffEmpty of
+        Clause () "Read" [] (EApp () (EVar () "resume") (ETuple() [EInt () 44]))]) TString EffEmpty of
     Right _ -> True
     _ -> False
 
@@ -635,7 +635,7 @@ checkTypeTest47 =
   case flip evalStateT 0 $ check effEnv actionsTypes
        (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
        [Clause () "return" ["x"] (EVar () "x"),
-        Clause () "Read" [] (EApp () (EVar () "resume") (EBool () True))]) TString EffEmpty of
+        Clause () "Read" [] (EApp () (EVar () "resume") (ETuple() [EBool () True]))]) TString EffEmpty of
     Left (TypesMismatchError () TInt TBool) -> True
     _ -> False
 
@@ -644,7 +644,7 @@ checkTypeTest48 =
   case flip evalStateT 0 $ check effEnv actionsTypes
        (EHandle () "IO" (ELet () "x" (EAction () "Read" (ETuple() [])) (EString () "15"))
        [Clause () "return" ["x"] (EVar () "x"),
-        Clause () "Read" [] (EUnOp () UnOpNot (EApp () (EVar () "resume") (EInt () 44)))]) TString EffEmpty of
+        Clause () "Read" [] (EUnOp () UnOpNot (EApp () (EVar () "resume") (ETuple() [EInt () 44])))]) TString EffEmpty of
     Left (TypesMismatchError () TString TBool) -> True
     _ -> False
 
@@ -654,7 +654,7 @@ checkTypeTest49 =
        (EHandle () "Bar" (ELet () "x" (EAction () "Foo" (ETuple() [EInt () 44]))
        (EBinOp () (BinOp "&&") (EVar () "x") (EBool () True)))
        [Clause () "return" ["x"] (EVar () "x"),
-        Clause () "Foo" ["x"] (EApp () (EVar () "resume")(EBool () False))]) TBool EffEmpty of
+        Clause () "Foo" ["x"] (EApp () (EVar () "resume")(ETuple() [EBool () False]))]) TBool EffEmpty of
     Right _ -> True
     _ -> False
 
