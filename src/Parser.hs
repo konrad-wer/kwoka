@@ -231,7 +231,7 @@ tSimple :: Parser Type
 tSimple  =
   (rword "Bool" >> return TBool) <|>
   (rword "Int" >> return TInt) <|>
-  (rword "String" >> return TInt) <|>
+  (rword "String" >> return TString) <|>
   parens typeParser
 
 effectRow :: Parser EffectRow

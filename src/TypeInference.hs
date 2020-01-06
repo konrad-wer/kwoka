@@ -238,7 +238,7 @@ infer eff c (EHandle p effName e clauses) =
         let c2 = foldr (uncurry Map.insert) context $ zip args $ map (TypeScheme []) argTypes
         case resumeArgType of
           Nothing -> return c2
-          Just rt -> return $ Map.insert "resume" (TypeScheme [] $ TArrow rt EffEmpty retType) c2
+          Just rt -> return $ Map.insert "resume" (TypeScheme [] $ TArrow (TProduct [rt]) EffEmpty retType) c2
 
 
 check :: EffectEnv p -> TypeEnv -> Expr p -> Type -> EffectRow -> InferState p Subst
