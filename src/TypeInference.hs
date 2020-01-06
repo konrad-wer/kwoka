@@ -210,7 +210,7 @@ infer eff c (EHandle p effName e clauses) =
         let clsTypes = zipWith apply clsSubsts ts
         let clsRows = zipWith apply clsSubsts rs
         let clsPos = map (\(Clause pos _ _ _) -> pos) clauses
-        let s3 = foldl1 compose clsSubsts
+        let s3 = foldl compose s2' clsSubsts
         (tr, s4) <- foldM (\(tPrev, s) (t, pos) -> do
           s' <- compose <$> unify pos (apply s tPrev) (apply s t) <*> pure s
           return (apply s' t, s')) (t0, s3) $ zip clsTypes clsPos
@@ -223,12 +223,12 @@ infer eff c (EHandle p effName e clauses) =
     getClauseName (Clause _ name _ _) = name
 
     checkClause :: EffectEnv p -> [ActionDef p] -> Clause p -> Type -> Type -> EffectRow -> InferState p Subst
-    checkClause effEnv actions (Clause _ name args e) retArgType t r =
+    checkClause effEnv actions (Clause _ name args ec) retArgType t r =
       case List.find ((==) name . getActionName) actions of
-        Nothing -> check effEnv (Map.insert (head args) (TypeScheme [] retArgType) c) e t r
+        Nothing -> check effEnv (Map.insert (head args) (TypeScheme [] retArgType) c) ec t r
         Just (ActionDef pos _ argTypes resumeType) -> do
           c2 <- extendEnv pos c args argTypes resumeType t
-          check effEnv c2 e t r
+          check effEnv c2 ec t r
 
     extendEnv :: p -> TypeEnv -> [Var] -> [Type] -> Maybe Type -> Type ->  InferState p TypeEnv
     extendEnv pos context args argTypes resumeArgType retType
