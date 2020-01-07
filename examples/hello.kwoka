@@ -1,0 +1,19 @@
+
+fn makeGreeting(name)
+{
+  Hello() ^ " " ^ name
+}
+
+effect Hello
+{
+  Hello() :: String
+}
+
+fn main()
+{
+  handle<Hello>(makeGreeting("General Kenobi."))
+  {
+    return(x) => (),
+    Hello() => resume("Hello there!")
+  }
+}

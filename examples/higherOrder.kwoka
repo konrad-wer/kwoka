@@ -1,0 +1,20 @@
+
+fn compose(f, g)
+{
+  \x => f(g(x))
+}
+
+fn succ(x)
+{
+  x + 1
+}
+
+fn pred(x)
+{
+  x - 1
+}
+
+fn idInt(x)
+{
+  compose(succ, pred)(x)
+}

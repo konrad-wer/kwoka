@@ -1,0 +1,23 @@
+
+fn foo(x)
+{
+  x * TripleInt()
+}
+
+effect Multi
+{
+  DoubleString() :: String
+  TripleInt() :: Int
+  SingleFun(Int) :: (Int, Int) -> Int
+}
+
+fn main()
+{
+  handle<Multi>(foo(45))
+  {
+    return(x) => x,
+    DoubleString() => resume("Bestrafer ist besser") * resume("It really is"),
+    TripleInt() => resume(1) + resume(2) + resume(4),
+    SingleFun(c) => resume(\x, y => x * c + y)
+  }
+}

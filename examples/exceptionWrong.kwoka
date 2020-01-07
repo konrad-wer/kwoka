@@ -16,6 +16,6 @@ fn main()
   handle<Exc>(saveDiv(4, 5))
   {
     return(x) => x,
-    Raise(s) => 0
+    Raise(s) => s
   }
 }
