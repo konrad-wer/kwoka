@@ -268,7 +268,6 @@ infer eff c (EHandle p effName e clauses) =
           Nothing -> return c2
           Just rt -> return $ Map.insert "resume" (TypeScheme [] $ TArrow (TProduct [rt]) EffEmpty retType) c2
 
-
 check :: EffectEnv p -> TypeEnv -> Expr p -> Type -> EffectRow -> InferState p Subst
 check effs c e t r = do
   (t', r', s) <- infer effs c e

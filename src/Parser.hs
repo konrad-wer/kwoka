@@ -171,7 +171,11 @@ eTuple :: Parser (Expr SourcePos)
 eTuple = parens (ETuple <$> getSourcePos <*> sepBy expr comma)
 
 eApp :: Parser (Expr SourcePos)
-eApp = EApp <$> getSourcePos <*> eSimple <*> eTuple
+eApp = do
+  pos <- getSourcePos
+  f <- eSimple
+  args <- some eTuple
+  return $ foldl (EApp pos) f args
 
 eAction :: Parser (Expr SourcePos)
 eAction = EAction <$> getSourcePos <*> upperIdentifier <*> eTuple
