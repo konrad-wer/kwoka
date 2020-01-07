@@ -10,6 +10,7 @@
 \usepackage{indentfirst}
 \usepackage{graphicx}
 \usepackage{hyperref}
+\usepackage{mathtools, array, mathpartir, amssymb, stmaryrd, cancel, cleveref, fancyvrb}
 \usepackage[nofoot,hdivide={2cm,*,2cm},vdivide={2cm,*,2cm}]{geometry}
 \frenchspacing
 
@@ -21,23 +22,36 @@
 \maketitle
 
 \section{Introduction}
-  Algebraic effects have received lot of recognition in
-  the functional programming community in recent years.
-  They can be viewed as resumable exceptions, providing more composable
-  approach for handling side effects than monads.
-  We introduce Kwoka - stripped down and simplified version of the Koka language \cite{Koka}.
-  In this report we describe our work on implementation of the
-  type inference for algebraic effects introduced
-  in the article by Daan Leijen \cite{leijen2017type}.
-  We follow his approach of using extensible effect rows with
-  scoped labels for inference of 
+Algebraic effects have received lot of recognition in
+the functional programming community in recent years.
+They are a novel approach for handling side effects.
+Effectful computations were always considered problematic by
+programming language researchers because they make programs harder to
+formally describe and reason about. Moreover, restricting side effects helps to
+write more maintainable and easier to test programs.
+With the growing popularity of the Haskell language, monads became preferred way of
+expressing side effects in a pure way. However, they do not compose very well.
+Algebraic effects can be viewed as resumable exceptions, providing more composable
+approach for handling side effects than monads.
 
-  In this report we specify our variant of a language. We describe the
-  details of the implemented type system. 
-  Then, we give an overview of the implementation and instructions for building and running Kwoka.
-  Finally we discuss further work on this project.
+We introduce Kwoka - stripped down and simplified version of the Koka language \cite{Koka}.
+In this report we describe our work on implementation of the
+type inference for algebraic effects introduced
+in the article by Daan Leijen \cite{leijen2017type}.
+We follow his approach of using extensible rows with
+scoped labels for tracking effects of computations.
+
+In this report we specify our variant of a language. We describe the
+details of the implemented type system.
+Then, we give an overview of the implementation and instructions for building and running Kwoka.
+Finally we discuss further work on this project.
+
 \section{Kwoka language description}
 Kwoka syntax is based on the syntax of the original Koka language and Rust.
+It is designed to resemble popular imperative languages, thus providing familiarity
+for programmers that don't know the functional paradigm.
+To articulate the familiarity even more and simplify working with effects, multi-argument
+functions are defined in the uncurried form.
 \begin{verbatim}
 fn fib(n)
 {
@@ -47,23 +61,30 @@ fn fib(n)
     fib(n - 1) + fib(n - 2)
 }
 \end{verbatim}
-Kwoka supports higher order and polymorphic functions.
+Kwoka supports higher order functions and let-polymorphism
+(generalization occurs for let expressions, but also for top level function definitions).
 \begin{verbatim}
 fn compose(f, g)
 {
   \x => f(g(x))
 }
 \end{verbatim}
-Something about algebraic effects
+\subsection*{Algebraic effects}
+The key feature of the Kwoka language are algebraic effects.
+Effects are defined as the top level definitions. In the definition we specify possible
+actions for that effect. For simplicity types of actions are not polymorphic.
+For handling the effects we the use \verb+handle+ expression.
+Inside the \verb+handle+ expression programmer has to provide ways of handling all of the
+effect's actions and handling of the return value of the effectful computation.
 \begin{verbatim}
-fn makeGreeting(name)
-{
-  Hello() ^ " " ^ name
-}
-
 effect Hello
 {
   Hello() :: String
+}
+
+fn makeGreeting(name)
+{
+  Hello() ^ " " ^ name
 }
 
 fn main()
@@ -75,8 +96,10 @@ fn main()
   }
 }
 \end{verbatim}
+
 Popular example of usage of the algebraic effects is using them to
-express exceptions.
+express exceptions. Thus, they don't have to be part of the language anymore.
+
 \begin{verbatim}
 effect Exc
 {
@@ -100,8 +123,95 @@ fn main()
   }
 }
 \end{verbatim}
+
+\subsection*{Definition scope}
+Top level functions are visible to themselves and functions below them.
+Effect definitions are visible in the entire source file.
+
 \section{Type Inference}
+Kwoka uses the Hindley-Milner type system \cite{Hindley, Milner} extended for handling
+inference of the effects. Effects are represented as extensible rows with
+scoped labels. This concept of extensible rows was originally proposed for implementing
+extensible records with scoped labels \cite{leijen2005extensible}, however they fit very
+well for tracking the effects of computations.
+
+\begin{mathpar}
+  \inferrule{\Gamma(x) = \sigma}
+            {\Gamma \vdash  x : \sigma \mid \epsilon} \and
+  \inferrule{\Gamma \vdash  e_1 : \sigma \mid \epsilon \\
+             \Gamma, x : \sigma \vdash  e_2 : \tau \mid \epsilon}
+            {\Gamma \vdash \text{let } x = e_1 \text{ in } e_2 : \tau \mid \epsilon} \and
+  \inferrule{\Gamma \vdash e : \tau \mid \langle\rangle \\
+             \overline{\alpha} \notin \mathrm{ftv}(\Gamma)}
+            {\Gamma \vdash e : \forall \overline{\alpha}.\tau \mid \epsilon} \and
+  \inferrule{\Gamma \vdash e : \forall \overline{\alpha}.\tau \mid \epsilon}
+            {\Gamma \vdash e : \tau [\overline{\alpha} \mapsto \overline{\tau}]\mid \epsilon} \and
+  \inferrule{\Gamma, x : \tau_1 \vdash e : \tau_2 \mid \epsilon'}
+            {\Gamma \vdash \lambda x. e : \tau_1 \rightarrow \epsilon' \tau_2 \mid \epsilon} \and
+  \inferrule{\Gamma \vdash  e_1 : \tau_1 \rightarrow \epsilon \, \tau_2 \mid \epsilon \\
+             \Gamma \vdash  e_2 : \tau_1 \mid \epsilon}
+            {\Gamma \vdash e_1(e_2) : \tau_2 \mid \epsilon}
+\end{mathpar}
+\vspace{1cm}
+\begin{mathpar}
+  \inferrule{\Gamma \vdash  e: \tau \mid \langle l \mid \epsilon \rangle \\
+             \Sigma(l) = \{op_1, \dots, op_n\} \\
+             \Gamma, x : \tau \vdash e_r : \tau_r \mid \epsilon \\
+             \Gamma \vdash op_i : \tau_i \rightarrow \langle l \rangle \tau_i' \mid \langle \rangle \\
+             \Gamma, \mathit{resume} : \tau_i' \rightarrow \epsilon \, \tau_r, x_i : \tau_i \vdash e_i : \tau_r \mid \epsilon}
+            {\Gamma \vdash \textbf{handle}(e)\{op_1(x_1) \rightarrow e_1; \, \dots; \, op_n(x_n) \rightarrow e_n; \,
+             \mathbf{return}(x) \rightarrow e_r \} : \tau_r \mid \epsilon}
+\end{mathpar}
+
+\vspace{1cm}
+
+We use the unification algorithm described in the Leijen's
+article about extensible records \cite{leijen2005extensible}.
+
+\vspace{2cm}
+
+\begin{center}
+  \large TODO Unification rules
+\end{center}
+
+\vspace{2cm}
+
 \section{Implementation}
+Kwoka is implemented in Haskell, as we believe this language has cleaner syntax and
+more elegant way of handling effectful computations than other mainstream functional languages.
+\subsection*{Source code structure}
+
+\subsubsection*{AST}
+In the AST module we define types to describe syntax of the expressions,
+effect definitions and types. Moreover, we provide pretty printing algorithm
+by making all of the above mentioned data types instances of the \verb+Show+ type class.
+
+\subsubsection*{Parser}
+For parsing we use the megaparsec library,
+which is an extended and improved version of the popular parsec library for monadic parsing.
+
+\subsubsection*{Preliminary}
+After the parsing phase we move to preliminary phase, where type and effect environments
+are built from the effect definitions.
+
+\subsubsection*{Type inference}
+In the type inference module we implement the Hindley-Milner type inference algorithm extended
+for handling algebraic effects. We use monad transformers to compose \verb+State+ and \verb+Either+
+monads, used for fresh variable names generating and type error signaling. Aside from that, in this
+module we define type for representing type errors and we make it an instance of the \verb+Show+
+type class for converting them into the human readable form.
+
+\subsubsection*{Main}
+
+In the main module we bind the algorithm together, handle reading the command line arguments and
+handle loading of the source file.
+
+Upon successful parsing and type checking, Kwoka pretty prints the parsed AST to the standard output.
+In the other case, it prints the human readable representation of the encountered error.
+
+\subsubsection*{Tests}
+In the \verb+test+ folder we provide over 85 unit tests for the type system.
+
 \section{Installing and running Kwoka}
 Kwoka requires {\href{https://docs.haskellstack.org/en/stable/README/}{\color{blue}stack}} for building.
 \begin{itemize}
@@ -109,8 +219,18 @@ Kwoka requires {\href{https://docs.haskellstack.org/en/stable/README/}{\color{bl
     \item Running: \verb+stack run yourSourceFile.kwoka+
     \item Running unit tests: \verb+stack test+
 \end{itemize}
+In the \verb+example+ folder we provide a handful of examples of the Kwoka language.
 
 \section{Further work}
+\begin{itemize}
+  \item We plan to implement the evaluation and the type directed selective CPS translation described in the
+  second part of the Daan Leijen's article\cite{leijen2017type}.
+  \item Small and simple, but extremely useful extension would be addition of list and product
+  types.
+  \item Another useful feature would be inclusion of effect actions with polymorphic types.
+  \item We plan to refactor unit tests to use popular testing framework for Haskell: HUnit.
+\end{itemize}
+
 
 \bibliographystyle{unsrt}
 \bibliography{biblo.bib}
