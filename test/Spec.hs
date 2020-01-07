@@ -1,5 +1,5 @@
 import AST
-import ASTBuilder
+import Preliminary
 import TypeInference
 import Control.Monad.State
 import qualified Data.Map as Map
