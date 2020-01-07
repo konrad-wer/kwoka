@@ -107,6 +107,7 @@ operators =
     InfixL (binOpParser "%")],
    [InfixL (binOpParser "+"),
     InfixL (binOpParser "-")],
+   [InfixR (binOpParser "^")],
    [InfixN (binOpParser "=="),
     InfixN (binOpParser "!="),
     InfixN (binOpParser "<="),

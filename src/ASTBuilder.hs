@@ -16,6 +16,7 @@ binOpTypes = Map.fromList
    ("%", TypeScheme [] $ TArrow (TProduct [TInt, TInt]) EffEmpty TInt),
    ("+", TypeScheme [] $ TArrow (TProduct [TInt, TInt]) EffEmpty TInt),
    ("-", TypeScheme [] $ TArrow (TProduct [TInt, TInt]) EffEmpty TInt),
+   ("^", TypeScheme [] $ TArrow (TProduct [TString, TString]) EffEmpty TString),
    ("==", TypeScheme [T "%1"] $ TArrow (TProduct [TVar $ T "%1", TVar $ T "%1"]) EffEmpty TBool),
    ("!=", TypeScheme [T "%2"] $ TArrow (TProduct [TVar $ T "%2", TVar $ T "%2"]) EffEmpty TBool),
    ("<=", TypeScheme [T "%3"] $ TArrow (TProduct [TVar $ T "%3", TVar $ T "%3"]) EffEmpty TBool),
