@@ -1,0 +1,118 @@
+\documentclass[a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{caption}
+\usepackage[table]{xcolor}
+\usepackage[english]{babel}
+\usepackage{amsmath, amsfonts}
+\usepackage{indentfirst}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[nofoot,hdivide={2cm,*,2cm},vdivide={2cm,*,2cm}]{geometry}
+\frenchspacing
+
+\author{Konrad Werbliński - 291878}
+\title{Programming languages - final project}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+  Algebraic effects have received lot of recognition in
+  the functional programming community in recent years.
+  They can be viewed as resumable exceptions, providing more composable
+  approach for handling side effects than monads.
+  We introduce Kwoka - stripped down and simplified version of the Koka language \cite{Koka}.
+  In this report we describe our work on implementation of the
+  type inference for algebraic effects introduced
+  in the article by Daan Leijen \cite{leijen2017type}.
+  We follow his approach of using extensible effect rows with
+  scoped labels for inference of 
+
+  In this report we specify our variant of a language. We describe the
+  details of the implemented type system. 
+  Then, we give an overview of the implementation and instructions for building and running Kwoka.
+  Finally we discuss further work on this project.
+\section{Kwoka language description}
+Kwoka syntax is based on the syntax of the original Koka language and Rust.
+\begin{verbatim}
+fn fib(n)
+{
+  if n == 0 || n == 1 then
+    n
+  else
+    fib(n - 1) + fib(n - 2)
+}
+\end{verbatim}
+Kwoka supports higher order and polymorphic functions.
+\begin{verbatim}
+fn compose(f, g)
+{
+  \x => f(g(x))
+}
+\end{verbatim}
+Something about algebraic effects
+\begin{verbatim}
+fn makeGreeting(name)
+{
+  Hello() ^ " " ^ name
+}
+
+effect Hello
+{
+  Hello() :: String
+}
+
+fn main()
+{
+  handle<Hello>(makeGreeting("General Kenobi."))
+  {
+    return(x) => (),
+    Hello() => resume("Hello there!")
+  }
+}
+\end{verbatim}
+Popular example of usage of the algebraic effects is using them to
+express exceptions.
+\begin{verbatim}
+effect Exc
+{
+  Raise(String)
+}
+
+fn saveDiv(n, m)
+{
+  if m == 0 then
+    Raise("Division by zero")
+  else
+    n / m
+}
+
+fn main()
+{
+  handle<Exc>(saveDiv(4, 5))
+  {
+    return(x) => x,
+    Raise(s) => 0
+  }
+}
+\end{verbatim}
+\section{Type Inference}
+\section{Implementation}
+\section{Installing and running Kwoka}
+Kwoka requires {\href{https://docs.haskellstack.org/en/stable/README/}{\color{blue}stack}} for building.
+\begin{itemize}
+    \item Building: \verb+stack build+
+    \item Running: \verb+stack run yourSourceFile.kwoka+
+    \item Running unit tests: \verb+stack test+
+\end{itemize}
+
+\section{Further work}
+
+\bibliographystyle{unsrt}
+\bibliography{biblo.bib}
+
+\end{document}

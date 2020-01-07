@@ -1,0 +1,42 @@
+@InProceedings{leijen2005extensible,
+    author = {Leijen, Daan},
+    title = {Extensible records with scoped labels},
+    booktitle = {Proceedings of the 2005 Symposium on Trends in Functional Programming (TFP'05), Tallin, Estonia},
+    year = {2005},
+    month = {September},
+    abstract = {Records provide a safe and flexible way to construct data structures. We describe a natural approach to typing polymorphic and extensible records that is simple, easy to use in practice, and straightforward to implement. A novel aspect of this work is that records can contain duplicate labels, effectively introducing a form of scoping over the labels. Furthermore, it is a fully orthogonal extension to existing type systems and programming languages. In particular, we show how it can be used conveniently with standard Hindley-Milner, qualified types, and ML-F. The records are implemented in the experimental Morrow interpreter. There is separate technical report that gives the constructive proofs of soundness and completeness.},
+    url = {https://www.microsoft.com/en-us/research/publication/extensible-records-with-scoped-labels/},
+    edition = {Proceedings of the 2005 Symposium on Trends in Functional Programming (TFP'05), Tallin, Estonia},
+}
+
+@article{Koka,
+    author = {Leijen, Daan},
+    year = {2014},
+    month = {06},
+    pages = {},
+    title = {Koka: Programming with Row Polymorphic Effect Types},
+    volume = {153},
+    journal = {Electronic Proceedings in Theoretical Computer Science},
+    doi = {10.4204/EPTCS.153.8}
+}
+
+@InProceedings{leijen2017type,
+    author = {Leijen, Daan},
+    title = {Type Directed Compilation of Row-Typed Algebraic Effects},
+    booktitle = {Proceedings of Principles of Programming Languages (POPL'17), Paris, France},
+    year = {2017},
+    month = {January},
+    abstract = {Algebraic effect handlers, are recently gaining in popularity as a
+    purely functional approach to modeling effects. In this article, we
+    give an end-to-end overview of practical algebraic effects in the
+    context of a compiled implementation in the Koka language. In
+    particular, we show how algebraic effects generalize over common
+    constructs like exception handling, state, iterators and async-await.
+    We give an effective type inference algorithm based on extensible
+    effect rows using scoped labels, and a direct operational semantics.
+    Finally, we show an efficient compilation scheme to common runtime
+    platforms (such as JavaScript, the JVM, or .NET) using a type
+    directed selective CPS translation.},
+    url = {https://www.microsoft.com/en-us/research/publication/type-directed-compilation-row-typed-algebraic-effects/},
+    edition = {Proceedings of Principles of Programming Languages (POPL'17), Paris, France},
+}
