@@ -1,4 +1,4 @@
-module ASTBuilder where
+module Preliminary where
 
 import AST
 import qualified Data.Map as Map

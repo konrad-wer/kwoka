@@ -2,7 +2,7 @@ module Main where
 
 import Parser
 import AST
-import ASTBuilder
+import Preliminary
 import TypeInference
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
