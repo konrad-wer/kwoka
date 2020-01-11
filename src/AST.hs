@@ -14,19 +14,20 @@ data UnOp = UnOpMinus | UnOpNot
 newtype BinOp = BinOp String
 
 data Expr p
-  = EVar    p Var
-  | EBool   p Bool
-  | EInt    p Integer
-  | EString p String
-  | EUnOp   p UnOp (Expr p)
-  | EBinOp  p BinOp (Expr p) (Expr p)
-  | ELambda p [Var] (Expr p)
-  | EApp    p (Expr p) (Expr p)
-  | EIf     p (Expr p) (Expr p) (Expr p)
-  | ELet    p Var (Expr p) (Expr p)
-  | EAction p Var (Expr p)
-  | EHandle p Var (Expr p) [Clause p]
-  | ETuple  p [Expr p]
+  = EVar      p Var
+  | EBool     p Bool
+  | EInt      p Integer
+  | EString   p String
+  | EUnOp     p UnOp (Expr p)
+  | EBinOp    p BinOp (Expr p) (Expr p)
+  | ELambda   p [Var] (Expr p)
+  | EApp      p (Expr p) (Expr p)
+  | EIf       p (Expr p) (Expr p) (Expr p)
+  | ELet      p Var (Expr p) (Expr p)
+  | EAction   p Var (Expr p)
+  | EHandle   p Var (Expr p) [Clause p]
+  | ETuple    p [Expr p]
+  | ELetTuple p [Var] (Expr p) (Expr p)
 
 data Clause p  = Clause p Var [Var] (Expr p)
 
@@ -143,6 +144,9 @@ showExpr indent = (showIndent indent ++) . s indent
     s i (ELet _ x e1 e2) =
       "let " ++ x ++ " = " ++ s i e1 ++ " in\n" ++
       showIndent i ++ s i e2
+    s i (ELetTuple _ xs e1 e2) =
+      "let " ++ addParens (intercalate ", " xs) ++ " = " ++ s i e1 ++ " in\n" ++
+      showIndent i ++ s i e2
     s i (EAction _ a e) = a ++ s i e
     s i (EHandle _ effName e cs) = "handle<" ++ effName ++ ">(" ++ s i e ++ ")\n" ++
       showIndent i ++ "{\n" ++
@@ -153,16 +157,17 @@ showExpr indent = (showIndent indent ++) . s indent
       addParens (intercalate ", " args) ++ " => "  ++ s i e
 
 getPos :: Expr p -> p
-getPos (EVar    p _) = p
-getPos (EBool   p _) = p
-getPos (EInt    p _) = p
-getPos (EString p _) = p
-getPos (EUnOp   p _ _) = p
-getPos (EBinOp  p _ _ _) = p
-getPos (ELambda p _ _) = p
-getPos (EApp    p _ _) = p
-getPos (EIf     p _ _ _) = p
-getPos (ELet    p _ _ _) = p
-getPos (EAction p _ _) = p
-getPos (EHandle p _ _ _) = p
-getPos (ETuple  p _) = p
+getPos (EVar      p _) = p
+getPos (EBool     p _) = p
+getPos (EInt      p _) = p
+getPos (EString   p _) = p
+getPos (EUnOp     p _ _) = p
+getPos (EBinOp    p _ _ _) = p
+getPos (ELambda   p _ _) = p
+getPos (EApp      p _ _) = p
+getPos (EIf       p _ _ _) = p
+getPos (ELet      p _ _ _) = p
+getPos (ELetTuple p _ _ _) = p
+getPos (EAction   p _ _) = p
+getPos (EHandle   p _ _ _) = p
+getPos (ETuple    p _) = p

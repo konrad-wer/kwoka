@@ -125,7 +125,8 @@ eTerm =
   try eApp <|>
   try eAction <|>
   eIf <|>
-  eLet <|>
+  try eLet <|>
+  eLetTuple <|>
   eLambda <|>
   eSimple
 
@@ -138,7 +139,8 @@ eSimple =
   EInt    <$> getSourcePos <*> try (fromIntegral <$> unsignedInteger) <|>
   EVar    <$> getSourcePos <*> identifier <|>
   eHandle <|>
-  try (parens expr)
+  try (parens expr) <|>
+  eTuple
 
 eLambda :: Parser (Expr SourcePos)
 eLambda = do
@@ -167,6 +169,16 @@ eLet = do
   e1 <- expr
   rword "in"
   ELet pos x e1 <$> expr
+
+eLetTuple :: Parser (Expr SourcePos)
+eLetTuple = do
+  pos <- getSourcePos
+  rword "let"
+  xs <- parens (sepBy identifier $ symbol ",")
+  void $ symbol "="
+  e1 <- expr
+  rword "in"
+  ELetTuple pos xs e1 <$> expr
 
 eTuple :: Parser (Expr SourcePos)
 eTuple = parens (ETuple <$> getSourcePos <*> sepBy expr comma)
@@ -237,7 +249,15 @@ tSimple  =
   (rword "Bool" >> return TBool) <|>
   (rword "Int" >> return TInt) <|>
   (rword "String" >> return TString) <|>
-  parens typeParser
+  tProduct
+
+tProduct :: Parser Type
+tProduct = parens
+  (do
+   ts <- sepBy1 typeParser comma
+   case ts of
+     [t] -> return t
+     _ -> return $ TProduct ts)
 
 effectRow :: Parser EffectRow
 effectRow = angles (do

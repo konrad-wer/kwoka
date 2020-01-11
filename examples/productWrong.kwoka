@@ -1,0 +1,4 @@
+fn fst(p)
+{
+  let (x, x) = p in x
+}

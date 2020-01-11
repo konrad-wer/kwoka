@@ -25,6 +25,7 @@ data TypeError p
   | CyclicSubstInTypeError p TypeVar Type
   | HandleActionsMismatchError p [Var] [Var]
   | ActionArityMismatchError p Int Int
+  | DuplicateVarsInPattern p [Var]
 
 addQuotes :: String -> String
 addQuotes = ("'" ++) . (++ "'")
@@ -48,6 +49,8 @@ instance SourcePos ~ p => Show (TypeError p) where
     " with actual action handlers: " ++  intercalate ", " (map addQuotes clauses)
   show (ActionArityMismatchError p n1 n2) = sourcePosPretty p ++ "\nCouldn't match expected action arity " ++ show n1 ++
     " with actual action handler arity " ++ show n2
+  show (DuplicateVarsInPattern p vars) = sourcePosPretty p ++ "\nDuplicate variable in tuple pattern: " ++
+    (addQuotes . addParens . intercalate ", " $ vars)
 
 type InferState p = StateT Int (Either (TypeError p))
 
@@ -219,6 +222,19 @@ infer eff c (ELet p x e1 e2) = do
   let s2' = s2 `compose` s1
   s3 <- compose <$> unifyRow p rx r <*> pure s2'
   return (apply s3 t, apply s3 r, s3)
+infer eff c (ELetTuple p xs e1 e2) =
+  if length xs /= Set.size (Set.fromList xs) then
+    inferError $ DuplicateVarsInPattern p xs
+  else do
+    as <- mapM (const (TVar . T <$> freshVar)) xs
+    rxs <- EffVar . E <$> freshVar
+    s1 <- check eff c e1 (TProduct as) rxs
+    let c' = apply s1 c
+    let c2 = foldl (flip $ uncurry Map.insert) c' $ zip xs (map (generalize c' . apply s1) as)
+    (t, r, s2) <- infer eff c2 e2
+    let s2' = s2 `compose` s1
+    s3 <- compose <$> unifyRow p rxs r <*> pure s2'
+    return (apply s3 t, apply s3 r, s3)
 infer eff c (EHandle p effName e clauses) =
   case Map.lookup effName eff of
     Nothing -> inferError $ UndeclaredEffectError p effName

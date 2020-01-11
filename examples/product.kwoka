@@ -1,0 +1,21 @@
+
+fn fst(p)
+{
+  let (x, y) = p in x
+}
+
+fn snd(p)
+{
+  let (x, y) = p in y
+}
+
+fn foo()
+{
+  (4, 2)
+}
+
+fn main()
+{
+  let p = foo() in
+  fst(p) + snd(p)
+}
