@@ -668,6 +668,38 @@ checkTypeTest50 =
     Left (RowsNotEqualError () EffEmpty (EffLabel _ (EffLabel _ (EffVar _)))) -> True
     _ -> False
 
+checkTypeTest51 :: Test
+checkTypeTest51 =
+  case flip evalStateT 0 $ check Map.empty binOpTypes
+       (ELetTuple () ["x", "y"] (ETuple () [EInt () 44, EInt () 42])
+       (EBinOp () (BinOp "+") (EVar () "x") (EVar () "y"))) TInt EffEmpty of
+    Right _ -> True
+    _ -> False
+
+checkTypeTest52 :: Test
+checkTypeTest52 =
+  case flip evalStateT 0 $ check Map.empty binOpTypes
+       (ELetTuple () ["x", "x"] (ETuple () [EInt () 44, EInt () 42])
+       (EBinOp () (BinOp "+") (EVar () "x") (EVar () "y"))) TInt EffEmpty of
+    Left (DuplicateVarsInPattern () ["x", "x"])-> True
+    _ -> False
+
+checkTypeTest53 :: Test
+checkTypeTest53 =
+  case flip evalStateT 0 $ check Map.empty binOpTypes
+       (ELetTuple () ["x", "y", "z"] (ETuple () [EInt () 44, EInt () 42])
+       (EBinOp () (BinOp "+") (EVar () "x") (EVar () "y"))) TInt EffEmpty of
+    Left (TypesMismatchError () (TProduct [_, _, _]) (TProduct [TInt, TInt])) -> True
+    _ -> False
+
+checkTypeTest54 :: Test
+checkTypeTest54 =
+  case flip evalStateT 0 $ check Map.empty binOpTypes
+       (ELetTuple () ["x", "y"] (ETuple () [EInt () 44, EString () "Name"])
+       (EBinOp () (BinOp "^") (EVar () "x") (EVar () "y"))) TInt EffEmpty of
+    Left (TypesMismatchError () TString TInt) -> True
+    _ -> False
+
 tests :: [(TestName, Test)]
 tests = [("rewriteRowTest1", rewriteRowTest1),
          ("rewriteRowTest2", rewriteRowTest2),
@@ -754,7 +786,11 @@ tests = [("rewriteRowTest1", rewriteRowTest1),
          ("checkTypeTest47", checkTypeTest47),
          ("checkTypeTest48", checkTypeTest48),
          ("checkTypeTest49", checkTypeTest49),
-         ("checkTypeTest50", checkTypeTest50)]
+         ("checkTypeTest50", checkTypeTest50),
+         ("checkTypeTest51", checkTypeTest51),
+         ("checkTypeTest52", checkTypeTest52),
+         ("checkTypeTest53", checkTypeTest53),
+         ("checkTypeTest54", checkTypeTest54)]
 
 runTest :: (TestName, Test) -> String
 runTest (name, t) =
