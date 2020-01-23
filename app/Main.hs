@@ -7,6 +7,9 @@ import TypeInference
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
 
+import qualified Data.Map as Map
+import Data.List
+
 readArgs :: [a] -> Maybe a
 readArgs [] = Nothing
 readArgs xs = return $ head xs
@@ -22,4 +25,7 @@ main = do
         Left err -> putStrLn $ errorBundlePretty err
         Right ast -> case checkProgram (buildEffectEnv ast) (buildTypeEnv ast) (getFuns ast) of
           Left err -> print err
-          _ -> putStrLn $ showProgram ast
+          Right c -> do
+            putStrLn $ showProgram ast
+            putStrLn "\n\n"
+            putStrLn (intercalate "\n". map show . Map.toList $ c)

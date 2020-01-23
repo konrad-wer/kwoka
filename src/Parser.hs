@@ -49,12 +49,15 @@ braces = between (symbol "{") (symbol "}")
 angles :: Parser a -> Parser a
 angles = between (symbol "<") (symbol ">")
 
+brackets :: Parser a -> Parser a
+brackets = between (symbol "[") (symbol "]")
+
 rword :: String -> Parser ()
 rword w = (lexeme . try) (string w *> notFollowedBy alphaNumChar)
 
 rws :: [String]
-rws = ["let", "def", "where", "if", "then", "else", "in", "handle", "return",
-       "False", "True", "Bool", "Int", "String", "λ", "fn", "effect"]
+rws = ["let", "def", "where", "if", "then", "else", "in", "handle", "return", "of",
+       "case", "False", "True", "Bool", "Int", "String", "λ", "fn", "effect"]
 
 identifier :: Parser Var
 identifier = (lexeme . try) (p >>= check)
@@ -107,7 +110,8 @@ operators =
     InfixL (binOpParser "%")],
    [InfixL (binOpParser "+"),
     InfixL (binOpParser "-")],
-   [InfixR (binOpParser "^")],
+   [InfixR (binOpParser ":"),
+    InfixR (binOpParser "^")],
    [InfixN (binOpParser "=="),
     InfixN (binOpParser "!="),
     InfixN (binOpParser "<="),
@@ -125,6 +129,7 @@ eTerm =
   try eApp <|>
   try eAction <|>
   eIf <|>
+  eCase <|>
   try eLet <|>
   eLetTuple <|>
   eLambda <|>
@@ -138,6 +143,7 @@ eSimple =
   EString <$> getSourcePos <*> stringLiteral <|>
   EInt    <$> getSourcePos <*> try (fromIntegral <$> unsignedInteger) <|>
   EVar    <$> getSourcePos <*> identifier <|>
+  eList <|>
   eHandle <|>
   try (parens expr) <|>
   eTuple
@@ -159,6 +165,21 @@ eIf = do
   e2 <- expr
   rword "else"
   EIf pos e1 e2 <$> expr
+
+eCase :: Parser (Expr SourcePos)
+eCase = do
+  pos <- getSourcePos
+  rword "case"
+  e1 <- expr
+  rword "of"
+  void $ symbol "[]"
+  void $ symbol "=>"
+  e2 <- expr
+  x <- identifier
+  void $ symbol ":"
+  xs <- identifier
+  void $ symbol "=>"
+  ECase pos e1 e2 (x, xs) <$> expr
 
 eLet :: Parser (Expr SourcePos)
 eLet = do
@@ -189,6 +210,12 @@ eApp = do
   f <- eSimple
   args <- some eTuple
   return $ foldl (EApp pos) f args
+
+eList :: Parser (Expr SourcePos)
+eList = do
+  pos <- getSourcePos
+  es <- brackets (sepBy expr comma)
+  return $ foldr (EBinOp pos (BinOp ":")) (ENil pos) es
 
 eAction :: Parser (Expr SourcePos)
 eAction = EAction <$> getSourcePos <*> upperIdentifier <*> eTuple
@@ -249,6 +276,7 @@ tSimple  =
   (rword "Bool" >> return TBool) <|>
   (rword "Int" >> return TInt) <|>
   (rword "String" >> return TString) <|>
+  brackets typeParser <|>
   tProduct
 
 tProduct :: Parser Type

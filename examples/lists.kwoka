@@ -1,0 +1,29 @@
+
+
+fn map(f, xs)
+{
+  case xs of
+    [] => []
+    x : xs => f(xs) : map(f, xs)
+}
+
+fn map(f, xs)
+{
+  case xs of
+    [] => []
+    x : xs => f(xs) : map(f, xs)
+}
+
+fn foldr(f, a, xs)
+{
+  case xs of
+    [] => a
+    x : xs => f(x, foldr(f, a, xs))
+}
+
+fn foldl(f, a, xs)
+{
+  case xs of
+    [] => a
+    x : xs => foldl(f, f(a, x), xs)
+}

@@ -85,6 +85,7 @@ instance Substitutable Type where
   apply _ TBool   = TBool
   apply _ TString = TString
   apply s (TArrow t1 eff t2) = TArrow (apply s t1) (apply s eff) $ apply s t2
+  apply s (TList t) = TList $ apply s t
   apply s (TProduct ts) = TProduct $ apply s ts
   apply s t@(TVar a) =
     case fromMaybe (TypeSubst t) $ Map.lookup a s of
@@ -96,6 +97,7 @@ instance Substitutable Type where
   fv TBool   = Set.empty
   fv TString = Set.empty
   fv (TArrow t1 r t2) = fv t1 `Set.union` fv r `Set.union` fv t2
+  fv (TList t) = fv t
   fv (TProduct ts) = foldr (Set.union . fv) Set.empty ts
   fv (TVar a) = Set.singleton a
 
@@ -126,18 +128,19 @@ instance Substitutable SubstObject where
   fv (EffSubst e) = fv e
   fv (TypeSubst t) = fv t
 
-checkProgram :: EffectEnv p -> TypeEnv -> [FunDef p] -> Either (TypeError p) ()
-checkProgram eff c funs =  void $ flip evalStateT 0 $
+checkProgram :: EffectEnv p -> TypeEnv -> [FunDef p] -> Either (TypeError p) TypeEnv
+checkProgram eff c funs =  flip evalStateT 0 $
   foldM (\cPrev fun@(FunDef _ name _ _) -> Map.insert name <$> inferFunDef eff cPrev fun <*> pure cPrev) c funs
 
 inferFunDef :: EffectEnv p -> TypeEnv -> FunDef p -> InferState p TypeScheme
 inferFunDef eff c (FunDef p name args body) = do
   ta <- mapM (const (TVar . T <$> freshVar)) args
+  let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) ta
   tr <- TVar . T <$> freshVar
   r <-  EffVar . E <$> freshVar
   let t = TArrow (TProduct ta) r tr
-  s <- check eff (Map.insert name (TypeScheme [] t) c) (ELambda p args body) t EffEmpty
-  return $ generalize c $ apply s t
+  s <- check eff (Map.insert name (TypeScheme [] t) c2) body tr r
+  return $ generalize (apply s c) $ apply s t
 
 infer :: EffectEnv p -> TypeEnv -> Expr p -> InferState p (Type, EffectRow, Subst)
 infer _ c (EVar p x) =
@@ -150,6 +153,7 @@ infer _ c (EVar p x) =
 infer _ _ (EInt _ _)    = (\x -> (TInt, EffVar . E $ x, emptySubst)) <$> freshVar
 infer _ _ (EBool _ _)   = (\x -> (TBool, EffVar . E $ x, emptySubst)) <$> freshVar
 infer _ _ (EString _ _) = (\x -> (TString, EffVar . E $ x, emptySubst)) <$> freshVar
+infer _ _ (ENil _) = (\x y -> (TList . TVar .T $ x, EffVar . E $ y, emptySubst)) <$> freshVar <*> freshVar
 infer eff c (EBinOp p (BinOp op) e1 e2) =
   infer eff c (EApp p (EVar p op) (ETuple p [e1, e2]))
 infer effs c (EUnOp _ UnOpNot e) = do
@@ -175,7 +179,7 @@ infer eff c (EApp p e1 e2) = do
   s1 <- check eff c e1 (TArrow ta tr tt) r
   s2 <- compose <$> check eff (apply s1 c) e2 (apply s1 ta) r' <*> pure s1
   s3 <- compose <$> unifyRow p (apply s2 tr) (apply s2 r) <*> pure s2
-  s4 <- compose <$>  unifyRow p (apply s3 r) (apply s3 r') <*> pure s3
+  s4 <- compose <$> unifyRow p (apply s3 r) (apply s3 r') <*> pure s3
   let res_t = apply s4 tt
   let res_r = apply s4 tr
   return (res_t, res_r, s4)
@@ -214,6 +218,16 @@ infer eff c (EIf p e0 e1 e2) = do
   s3 <- compose <$> unifyRow p (apply s2' cr) (apply s2' tr) <*> pure s2'
   s4 <- compose <$> check eff (apply s3 c) e2 (apply s3 t) (apply s3 tr) <*> pure s3
   return (apply s4 t, apply s4 tr, s4)
+infer eff c (ECase p e0 e1 (x, xs) e2) = do
+  r1 <- EffVar . E <$> freshVar
+  tl <- TVar . T <$> freshVar
+  s1 <- check eff c e0 (TList tl) r1
+  (t, r2, s2) <- infer eff (apply s1 c) e1
+  let s2' = s2 `compose` s1
+  s3 <- compose <$> unifyRow p (apply s2' r1) (apply s2' r2) <*> pure s2'
+  let c2 = apply s3 (Map.insert x (TypeScheme [] tl) (Map.insert xs (TypeScheme [] $ TList tl) c))
+  s4 <- compose <$> check eff c2 e2 (apply s3 t) (apply s3 r2) <*> pure s3
+  return (apply s4 t, apply s4 r2, s4)
 infer eff c (ELet p x e1 e2) = do
   (tx, rx, s1) <- infer eff c e1
   let c' = apply s1 c
@@ -324,6 +338,7 @@ unify :: p -> Type -> Type -> InferState p Subst
 unify _ TBool TBool = return emptySubst
 unify _ TInt TInt = return emptySubst
 unify _ TString TString = return emptySubst
+unify p (TList t1) (TList t2) = unify p t1 t2
 unify p (TArrow t1 r t2) (TArrow t1' r' t2') = do
   s <- unify p t1 t1'
   s' <- compose <$> unifyRow p (apply s r) (apply s r') <*> pure s

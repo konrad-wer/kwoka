@@ -18,6 +18,7 @@ data Expr p
   | EBool     p Bool
   | EInt      p Integer
   | EString   p String
+  | ENil      p
   | EUnOp     p UnOp (Expr p)
   | EBinOp    p BinOp (Expr p) (Expr p)
   | ELambda   p [Var] (Expr p)
@@ -28,6 +29,7 @@ data Expr p
   | EHandle   p Var (Expr p) [Clause p]
   | ETuple    p [Expr p]
   | ELetTuple p [Var] (Expr p) (Expr p)
+  | ECase     p (Expr p) (Expr p) (Var, Var) (Expr p)
 
 data Clause p  = Clause p Var [Var] (Expr p)
 
@@ -41,6 +43,7 @@ data Type
   | TBool
   | TInt
   | TString
+  | TList Type
   | TProduct [Type]
   | TArrow Type EffectRow Type
   deriving Eq
@@ -59,6 +62,9 @@ addParens = ("("++) . (++ ")")
 addAngles :: String -> String
 addAngles = ("<"++) . (++ ">")
 
+addBrackets :: String -> String
+addBrackets = ("["++) . (++ "]")
+
 showIndent :: Int -> String
 showIndent = flip replicate ' ' . (* 2)
 
@@ -74,6 +80,7 @@ instance Show Type where
   show TBool = "Bool"
   show TInt = "Int"
   show TString = "String"
+  show (TList t) = addBrackets $ show t
   show (TProduct ts) = addParens $ intercalate ", " $ map show ts
   show (TArrow t1 effs t2) = addParens (show t1 ++ " -> " ++ show effs ++ " " ++ show t2)
 
@@ -129,6 +136,7 @@ showExpr :: Int -> Expr p -> String
 showExpr indent = (showIndent indent ++) . s indent
   where
     s _ (EVar _ x) = x
+    s _ (ENil _) = "[]"
     s _ (EBool _ b) = show b
     s _ (EInt _ n) = show n
     s _ (EString _ str) = show str
@@ -141,6 +149,10 @@ showExpr indent = (showIndent indent ++) . s indent
         showIndent (i + 1) ++ s (i + 1) e1 ++ "\n" ++
       showIndent i ++ "else\n" ++
         showIndent (i + 1) ++ s (i + 1) e2
+    s i (ECase _ e0 e1 (x, xs) e2) =
+      "case " ++ s i e0 ++ " of\n" ++
+      showIndent (i + 1) ++ "[] => " ++ s (i + 3) e1 ++ "\n" ++
+      showIndent (i + 1) ++ x ++ " : " ++ xs ++ " => " ++ s (i + 3) e2
     s i (ELet _ x e1 e2) =
       "let " ++ x ++ " = " ++ s i e1 ++ " in\n" ++
       showIndent i ++ s i e2
@@ -158,6 +170,7 @@ showExpr indent = (showIndent indent ++) . s indent
 
 getPos :: Expr p -> p
 getPos (EVar      p _) = p
+getPos (ENil      p) = p
 getPos (EBool     p _) = p
 getPos (EInt      p _) = p
 getPos (EString   p _) = p
@@ -171,3 +184,4 @@ getPos (ELetTuple p _ _ _) = p
 getPos (EAction   p _ _) = p
 getPos (EHandle   p _ _ _) = p
 getPos (ETuple    p _) = p
+getPos (ECase     p _ _ _ _) = p
