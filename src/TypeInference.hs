@@ -7,6 +7,7 @@ module TypeInference where
 --http://dev.stephendiehl.com/fun/006_hindley_milner.html
 
 import AST
+import CommonUtils
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -25,10 +26,9 @@ data TypeError p
   | CyclicSubstInTypeError p TypeVar Type
   | HandleActionsMismatchError p [Var] [Var]
   | ActionArityMismatchError p Int Int
-  | DuplicateVarsInPattern p [Var]
-
-addQuotes :: String -> String
-addQuotes = ("'" ++) . (++ "'")
+  | DuplicateVarsInTuplePattern p [Var]
+  | DuplicateVarsInListPattern p Var
+  | DuplicateVarsInFunction p [Var]
 
 instance SourcePos ~ p => Show (TypeError p) where
   show (TypesMismatchError p t1 t2) = sourcePosPretty p ++ "\nCouldn't match expected type " ++ addQuotes (show t1) ++
@@ -49,8 +49,12 @@ instance SourcePos ~ p => Show (TypeError p) where
     " with actual action handlers: " ++  intercalate ", " (map addQuotes clauses)
   show (ActionArityMismatchError p n1 n2) = sourcePosPretty p ++ "\nCouldn't match expected action arity " ++ show n1 ++
     " with actual action handler arity " ++ show n2
-  show (DuplicateVarsInPattern p vars) = sourcePosPretty p ++ "\nDuplicate variable in tuple pattern: " ++
+  show (DuplicateVarsInTuplePattern p vars) = sourcePosPretty p ++ "\nDuplicate variable in tuple pattern: " ++
     (addQuotes . addParens . intercalate ", " $ vars)
+  show (DuplicateVarsInListPattern p x) = sourcePosPretty p ++ "\nDuplicate variable in list pattern: " ++
+    addQuotes (x ++ " : " ++ x)
+  show (DuplicateVarsInFunction p vars) = sourcePosPretty p ++ "\nDuplicate variable in function arguments: " ++
+    (addQuotes . intercalate ", " $ vars)
 
 type InferState p = StateT Int (Either (TypeError p))
 
@@ -133,14 +137,16 @@ checkProgram eff c funs =  flip evalStateT 0 $
   foldM (\cPrev fun@(FunDef _ name _ _) -> Map.insert name <$> inferFunDef eff cPrev fun <*> pure cPrev) c funs
 
 inferFunDef :: EffectEnv p -> TypeEnv -> FunDef p -> InferState p TypeScheme
-inferFunDef eff c (FunDef p name args body) = do
-  ta <- mapM (const (TVar . T <$> freshVar)) args
-  let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) ta
-  tr <- TVar . T <$> freshVar
-  r <-  EffVar . E <$> freshVar
-  let t = TArrow (TProduct ta) r tr
-  s <- check eff (Map.insert name (TypeScheme [] t) c2) body tr r
-  return $ generalize (apply s c) $ apply s t
+inferFunDef eff c (FunDef p name args body)
+  | notUnique args = inferError $ DuplicateVarsInFunction p args
+  | otherwise = do
+    ta <- mapM (const (TVar . T <$> freshVar)) args
+    let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) ta
+    tr <- TVar . T <$> freshVar
+    r <-  if name == "main" then return EffEmpty else EffVar . E <$> freshVar
+    let t = TArrow (TProduct ta) r tr
+    s <- check eff (Map.insert name (TypeScheme [] t) c2) body tr r
+    return $ generalize (apply s c) $ apply s t
 
 infer :: EffectEnv p -> TypeEnv -> Expr p -> InferState p (Type, EffectRow, Subst)
 infer _ c (EVar p x) =
@@ -218,16 +224,18 @@ infer eff c (EIf p e0 e1 e2) = do
   s3 <- compose <$> unifyRow p (apply s2' cr) (apply s2' tr) <*> pure s2'
   s4 <- compose <$> check eff (apply s3 c) e2 (apply s3 t) (apply s3 tr) <*> pure s3
   return (apply s4 t, apply s4 tr, s4)
-infer eff c (ECase p e0 e1 (x, xs) e2) = do
-  r1 <- EffVar . E <$> freshVar
-  tl <- TVar . T <$> freshVar
-  s1 <- check eff c e0 (TList tl) r1
-  (t, r2, s2) <- infer eff (apply s1 c) e1
-  let s2' = s2 `compose` s1
-  s3 <- compose <$> unifyRow p (apply s2' r1) (apply s2' r2) <*> pure s2'
-  let c2 = apply s3 (Map.insert x (TypeScheme [] tl) (Map.insert xs (TypeScheme [] $ TList tl) c))
-  s4 <- compose <$> check eff c2 e2 (apply s3 t) (apply s3 r2) <*> pure s3
-  return (apply s4 t, apply s4 r2, s4)
+infer eff c (ECase p e0 e1 (x, xs) e2)
+  | x == xs = inferError $ DuplicateVarsInListPattern p x
+  | otherwise = do
+    r1 <- EffVar . E <$> freshVar
+    tl <- TVar . T <$> freshVar
+    s1 <- check eff c e0 (TList tl) r1
+    (t, r2, s2) <- infer eff (apply s1 c) e1
+    let s2' = s2 `compose` s1
+    s3 <- compose <$> unifyRow p (apply s2' r1) (apply s2' r2) <*> pure s2'
+    let c2 = apply s3 (Map.insert x (TypeScheme [] tl) (Map.insert xs (TypeScheme [] $ TList tl) c))
+    s4 <- compose <$> check eff c2 e2 (apply s3 t) (apply s3 r2) <*> pure s3
+    return (apply s4 t, apply s4 r2, s4)
 infer eff c (ELet p x e1 e2) = do
   (tx, rx, s1) <- infer eff c e1
   let c' = apply s1 c
@@ -236,10 +244,9 @@ infer eff c (ELet p x e1 e2) = do
   let s2' = s2 `compose` s1
   s3 <- compose <$> unifyRow p rx r <*> pure s2'
   return (apply s3 t, apply s3 r, s3)
-infer eff c (ELetTuple p xs e1 e2) =
-  if length xs /= Set.size (Set.fromList xs) then
-    inferError $ DuplicateVarsInPattern p xs
-  else do
+infer eff c (ELetTuple p xs e1 e2)
+  | notUnique xs = inferError $ DuplicateVarsInTuplePattern p xs
+  | otherwise = do
     as <- mapM (const (TVar . T <$> freshVar)) xs
     rxs <- EffVar . E <$> freshVar
     s1 <- check eff c e1 (TProduct as) rxs

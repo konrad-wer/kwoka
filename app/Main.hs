@@ -23,9 +23,13 @@ main = do
       sourceCode <- readFile filename
       case parseProgram filename sourceCode of
         Left err -> putStrLn $ errorBundlePretty err
-        Right ast -> case checkProgram (buildEffectEnv ast) (buildTypeEnv ast) (getFuns ast) of
-          Left err -> print err
-          Right c -> do
-            putStrLn $ showProgram ast
-            putStrLn "\n\n"
-            putStrLn (intercalate "\n". map show . Map.toList $ c)
+        Right ast ->
+          case buildProgram ast of
+            Left err -> print err
+            Right (funs, effectEnv, typeEnv) ->
+              case checkProgram effectEnv typeEnv funs of
+                Left err -> print err
+                Right c -> do
+                  putStrLn $ showProgram ast
+                  putStrLn "\n\n"
+                  putStrLn (intercalate "\n". map show . Map.toList $ c)

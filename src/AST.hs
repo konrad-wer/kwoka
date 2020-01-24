@@ -1,5 +1,6 @@
 module AST where
 
+import CommonUtils
 import Data.List
 import qualified Data.Map as Map
 
@@ -55,15 +56,6 @@ data EffectRow
   | EffEmpty
   | EffVar TypeVar
   deriving Eq
-
-addParens :: String -> String
-addParens = ("("++) . (++ ")")
-
-addAngles :: String -> String
-addAngles = ("<"++) . (++ ">")
-
-addBrackets :: String -> String
-addBrackets = ("["++) . (++ "]")
 
 showIndent :: Int -> String
 showIndent = flip replicate ' ' . (* 2)

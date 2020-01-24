@@ -1,12 +1,34 @@
+{-# LANGUAGE GADTs #-}
+
 module Preliminary where
 
 import AST
+import CommonUtils
 import qualified Data.Map as Map
 import Control.Monad.State
+import Data.List
+import Text.Megaparsec.Pos
 
-buildEffectEnv :: [TopLevelDef p] -> EffectEnv p
-buildEffectEnv [] = Map.empty
-buildEffectEnv (DefEff (EffectDef _ name actions) : defs) = Map.insert name actions $ buildEffectEnv defs
+data PreliminaryError p
+  = DuplicateFunctionDefError p Var
+  | DuplicateActionDefError p Var
+  | DuplicateEffectDefError p Var
+
+instance SourcePos ~ p => Show (PreliminaryError p) where
+  show (DuplicateFunctionDefError p name) = sourcePosPretty p ++ "\nDuplicate definitions for function: " ++
+    addQuotes name
+  show (DuplicateActionDefError p name) = sourcePosPretty p ++ "\nDuplicate definitions for action: " ++
+    addQuotes name
+  show (DuplicateEffectDefError p name) = sourcePosPretty p ++ "\nDuplicate definitions for effect: " ++
+    addQuotes name
+
+buildEffectEnv :: [TopLevelDef p] -> Either (PreliminaryError p) (EffectEnv p)
+buildEffectEnv [] = return Map.empty
+buildEffectEnv (DefEff (EffectDef p name actions) : defs) = do
+  tailRes <- buildEffectEnv defs
+  case Map.lookup name tailRes of
+    Just _ -> Left $ DuplicateEffectDefError p name
+    Nothing -> return $ Map.insert name actions tailRes
 buildEffectEnv (_ : defs) = buildEffectEnv defs
 
 binOpTypes :: Map.Map Var TypeScheme
@@ -27,33 +49,51 @@ binOpTypes = Map.fromList
    ("&&", TypeScheme [] $ TArrow (TProduct [TBool, TBool]) EffEmpty TBool),
    ("||", TypeScheme [] $ TArrow (TProduct [TBool, TBool]) EffEmpty TBool)]
 
-buildTypeEnv :: [TopLevelDef p] -> TypeEnv
+buildTypeEnv :: [TopLevelDef p] -> Either (PreliminaryError p) TypeEnv
 buildTypeEnv topLevelDefs =
-  Map.union binOpTypes $ flip evalState 0 $ bte topLevelDefs
+  Map.union binOpTypes <$> evalStateT (bte topLevelDefs) 0
   where
-    bte :: [TopLevelDef p] -> State Int TypeEnv
+    bte :: [TopLevelDef p] -> StateT Int (Either (PreliminaryError p)) TypeEnv
     bte [] = return Map.empty
-    bte (DefEff (EffectDef _ name actions) : defs) = do
+    bte (DefEff (EffectDef p name actions) : defs) = do
       let names = map (\(ActionDef _ nm _ _) -> nm) actions
       ts <- mapM (buildActionType name) actions
       res <- bte defs
-      return $ foldr (uncurry Map.insert) res $ zip names ts
+      foldM (\r (name, t) ->
+        if name `Map.member` r then
+          lift . Left $ DuplicateActionDefError p name
+        else
+          return $ Map.insert name t r) res $ zip names ts
     bte (_ : defs) = bte defs
 
-    buildActionType :: Var -> ActionDef p -> State Int TypeScheme
+    buildActionType :: Var -> ActionDef p -> StateT Int (Either (PreliminaryError p)) TypeScheme
     buildActionType effName (ActionDef _ _ args (Just tRes)) =
       return $ TypeScheme [] $ TArrow (TProduct args) (EffLabel effName EffEmpty) tRes
     buildActionType effName (ActionDef _ _ args Nothing) = do
       tRes <- T <$> freshVar
       return $ TypeScheme [tRes] $ TArrow (TProduct args) (EffLabel effName EffEmpty) $ TVar tRes
 
-    freshVar :: State Int String
+    freshVar :: StateT Int (Either (PreliminaryError p)) String
     freshVar = do
       n <- get
       modify (+1)
       return ("$" ++ show n)
 
-getFuns :: [TopLevelDef p] -> [FunDef p]
-getFuns [] = []
-getFuns (DefFun f : defs) = f : getFuns defs
-getFuns (_ : defs) = getFuns defs
+getFuns :: [TopLevelDef p] -> Either (PreliminaryError p) [FunDef p]
+getFuns defs =
+  let funs = filterFuns defs in
+  case filter ((> 1) . length) $ groupBy (\(FunDef _ n1 _ _) (FunDef _ n2 _ _) -> n1 == n2) funs of
+    [] -> return funs
+    ((FunDef p name _ _) : _) : _ -> Left $ DuplicateFunctionDefError p name
+    _ -> undefined
+  where
+    filterFuns [] = []
+    filterFuns (DefFun f : dfs) = f : filterFuns dfs
+    filterFuns (_ : dfs) = filterFuns dfs
+
+buildProgram :: [TopLevelDef p] -> Either (PreliminaryError p) ([FunDef p], EffectEnv p, TypeEnv)
+buildProgram defs = do
+  funs <- getFuns defs
+  effectEnv <- buildEffectEnv defs
+  typeEnv <- buildTypeEnv defs
+  return (funs, effectEnv, typeEnv)
