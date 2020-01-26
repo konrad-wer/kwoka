@@ -57,7 +57,3 @@ translateProgram c =
     tp ((FunDef _ name args body) : funs) (_, env) =
       let env' = Map.insert name (VClosure env' args $ translate c body) env in
       tp funs (if name == "main" then Just $ translate c body else Nothing, env')
--- translateProgram [] = (Nothing, Map.empty)
--- translateProgram ((FunDef p "main" [] body) : funs) = cross (const $ Just $ translate body) id $ translateProgram funs
--- translateProgram ((FunDef p name args body) : funs) =
---   cross id (Map.insert name (MLambda args $ translate body)) $ translateProgram funs
