@@ -6,14 +6,7 @@ fn fib(n)
     fib(n - 1) + fib(n - 2)
 }
 
-fn map(f, xs)
-{
-  case xs of
-    [] => []
-    x : xs => f(x) : map(f, xs)
-}
-
 fn main()
 {
-  map(fib, [1,2,3,4,5,19])
+  fib(19)
 }
