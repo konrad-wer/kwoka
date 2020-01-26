@@ -1,8 +1,8 @@
 
 
-effect Flip
+effect Toss
 {
-  Flip() :: Bool
+  Coin() :: Bool
 }
 
 fn sublist(xs)
@@ -10,7 +10,7 @@ fn sublist(xs)
   case xs of
     [] => []
     x : xs =>
-      if Flip() then
+      if Coin() then
         x : sublist(xs)
       else
         sublist(xs)
@@ -21,9 +21,9 @@ fn sublist(xs)
 */
 fn main()
 {
-  handle<Flip>(sublist([1,2,3,4,5]))
+  handle<Toss>(sublist([1,2,3,4,5]))
   {
     return(x) => [x],
-    Flip() => resume(True) @ resume(False)
+    Coin() => resume(True) @ resume(False)
   }
 }
