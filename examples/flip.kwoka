@@ -1,0 +1,26 @@
+
+
+effect Flip
+{
+  Flip() :: Bool
+}
+
+fn sublist(xs)
+{
+  case xs of
+    [] => []
+    x : xs =>
+      if Flip() then
+        x : sublist(xs)
+      else
+        sublist(xs)
+}
+
+fn main()
+{
+  handle<Flip>(sublist([1,2,3,4,5]))
+  {
+    return(x) => [x],
+    Flip() => resume(True) @ resume(False)
+  }
+}
