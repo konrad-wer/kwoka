@@ -111,6 +111,7 @@ operators =
    [InfixL (binOpParser "+"),
     InfixL (binOpParser "-")],
    [InfixR (binOpParser ":"),
+    InfixR (binOpParser "@"),
     InfixR (binOpParser "^")],
    [InfixN (binOpParser "=="),
     InfixN (binOpParser "!="),
@@ -151,8 +152,8 @@ eSimple =
 eLambda :: Parser (Expr SourcePos)
 eLambda = do
   pos <- getSourcePos
-  void (symbol "\\" <|> symbol "λ")
-  args <- sepBy identifier comma
+  rword "fn"
+  args <- parens $ sepBy identifier comma
   void $ symbol "=>"
   ELambda pos args <$> expr
 

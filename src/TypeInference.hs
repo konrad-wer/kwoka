@@ -29,6 +29,7 @@ data TypeError p
   | DuplicateVarsInTuplePattern p [Var]
   | DuplicateVarsInListPattern p Var
   | DuplicateVarsInFunction p [Var]
+  | ArgsForMainError p
 
 instance SourcePos ~ p => Show (TypeError p) where
   show (TypesMismatchError p t1 t2) = sourcePosPretty p ++ "\nCouldn't match expected type " ++ addQuotes (show t1) ++
@@ -55,6 +56,7 @@ instance SourcePos ~ p => Show (TypeError p) where
     addQuotes (x ++ " : " ++ x)
   show (DuplicateVarsInFunction p vars) = sourcePosPretty p ++ "\nDuplicate variable in function arguments: " ++
     (addQuotes . intercalate ", " $ vars)
+  show (ArgsForMainError p) = sourcePosPretty p ++ "\nThe main function should not take any arguments"
 
 type InferState p = StateT Int (Either (TypeError p))
 
@@ -139,6 +141,7 @@ checkProgram eff c funs =  flip evalStateT 0 $
 inferFunDef :: EffectEnv p -> TypeEnv -> FunDef p -> InferState p TypeScheme
 inferFunDef eff c (FunDef p name args body)
   | notUnique args = inferError $ DuplicateVarsInFunction p args
+  | name == "main" && args /= [] = inferError $ ArgsForMainError p
   | otherwise = do
     ta <- mapM (const (TVar . T <$> freshVar)) args
     let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) ta

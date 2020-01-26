@@ -85,10 +85,21 @@ instance Show EffectRow where
       toList (EffLabel l es) = l : toList es
 
 instance Show TypeScheme where
+  show (TypeScheme [] t) = show t
   show (TypeScheme vars t) = "∀ " ++ intercalate ", " (map show vars) ++ " . " ++ show t
 
 showProgram :: [TopLevelDef p] -> String
 showProgram = intercalate "\n\n" . map show
+
+showTypedProgram :: TypeEnv -> [TopLevelDef p] -> String
+showTypedProgram c = intercalate "\n\n" . map (showTyped c)
+
+showTyped :: TypeEnv -> TopLevelDef p -> String
+showTyped _ (DefEff eff) = show eff
+showTyped c (DefFun (FunDef _ name args e)) =
+    "fn " ++ name ++ addParens (showArgs args) ++
+    " // " ++ show (c Map.! name) ++
+    "\n{\n" ++ showExpr 1 e ++ "\n}"
 
 instance Show (TopLevelDef p) where
   show (DefFun f) = show f
@@ -134,7 +145,7 @@ showExpr indent = (showIndent indent ++) . s indent
     s _ (EString _ str) = show str
     s _ (EUnOp _ op e) = show op ++ show e
     s i (EBinOp _ op e1 e2) = addParens $ s i e1 ++ " " ++ show op ++ " " ++ s i e2
-    s i (ELambda _ args e) = "(λ " ++ showArgs args ++ " => "++ s i e ++ ")"
+    s i (ELambda _ args e) = "(fn " ++ addParens (showArgs args) ++ " => "++ s i e ++ ")"
     s i (EApp _ e1 e2) = s i e1 ++ s i e2
     s i (EIf _ e0 e1 e2) =
       "if " ++ s i e0 ++ " then\n" ++

@@ -40,6 +40,7 @@ binOpTypes = Map.fromList
    ("-", TypeScheme [] $ TArrow (TProduct [TInt, TInt]) EffEmpty TInt),
    ("^", TypeScheme [] $ TArrow (TProduct [TString, TString]) EffEmpty TString),
    (":",  TypeScheme [T "%0"] $ TArrow (TProduct [TVar $ T "%0", TList $ TVar $ T "%0"]) EffEmpty (TList $ TVar $ T "%0")),
+   ("@",  TypeScheme [T "%0"] $ TArrow (TProduct [TList . TVar $ T "%0", TList . TVar $ T "%0"]) EffEmpty (TList $ TVar $ T "%0")),
    ("==", TypeScheme [T "%1"] $ TArrow (TProduct [TVar $ T "%1", TVar $ T "%1"]) EffEmpty TBool),
    ("!=", TypeScheme [T "%2"] $ TArrow (TProduct [TVar $ T "%2", TVar $ T "%2"]) EffEmpty TBool),
    ("<=", TypeScheme [T "%3"] $ TArrow (TProduct [TVar $ T "%3", TVar $ T "%3"]) EffEmpty TBool),
@@ -59,11 +60,11 @@ buildTypeEnv topLevelDefs =
       let names = map (\(ActionDef _ nm _ _) -> nm) actions
       ts <- mapM (buildActionType name) actions
       res <- bte defs
-      foldM (\r (name, t) ->
-        if name `Map.member` r then
-          lift . Left $ DuplicateActionDefError p name
+      foldM (\r (nm, t) ->
+        if nm `Map.member` r then
+          lift . Left $ DuplicateActionDefError p nm
         else
-          return $ Map.insert name t r) res $ zip names ts
+          return $ Map.insert nm t r) res $ zip names ts
     bte (_ : defs) = bte defs
 
     buildActionType :: Var -> ActionDef p -> StateT Int (Either (PreliminaryError p)) TypeScheme
