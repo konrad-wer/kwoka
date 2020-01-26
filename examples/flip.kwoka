@@ -16,6 +16,9 @@ fn sublist(xs)
         sublist(xs)
 }
 
+/*
+  Generating all sublists of the given list.
+*/
 fn main()
 {
   handle<Flip>(sublist([1,2,3,4,5]))
