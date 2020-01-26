@@ -7,13 +7,6 @@ fn map(f, xs)
     x : xs => f(xs) : map(f, xs)
 }
 
-fn map(f, xs)
-{
-  case xs of
-    [] => []
-    x : xs => f(xs) : map(f, xs)
-}
-
 fn foldr(f, a, xs)
 {
   case xs of

@@ -1,0 +1,26 @@
+
+fn filter(f, xs)
+{
+  case xs of
+    [] => []
+    x : xs =>
+      if f(x) then
+        x : filter(f, xs)
+      else
+        filter(f, xs)
+}
+
+fn quicksort(xs)
+{
+  case xs of
+    [] => []
+    p : xs =>
+      let smaller = filter(fn (x) => x < p, xs) in
+      let greater = filter(fn (x) => x >= p, xs) in
+      quicksort(smaller) @ p : quicksort(greater)
+}
+
+fn main()
+{
+  quicksort([45,44,57,42,59,11,2,1,1024,123])
+}

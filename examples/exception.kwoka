@@ -13,7 +13,7 @@ fn saveDiv(n, m)
 
 fn main()
 {
-  handle<Exc>(saveDiv(4, 5))
+  handle<Exc>(saveDiv(4, 0))
   {
     return(x) => x,
     Raise(s) => 0

@@ -13,7 +13,7 @@ fn main()
 {
   handle<Hello>(makeGreeting("General Kenobi."))
   {
-    return(x) => (),
+    return(x) => x,
     Hello() => resume("Hello there!")
   }
 }

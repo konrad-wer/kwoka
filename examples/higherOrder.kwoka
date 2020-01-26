@@ -1,7 +1,7 @@
 
 fn compose(f, g)
 {
-  \x => f(g(x))
+  fn (x) => f(g(x))
 }
 
 fn succ(x)
