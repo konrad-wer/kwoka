@@ -53,7 +53,15 @@ translateProgram c =
   flip tp (Nothing, Map.empty)
   where
     tp [] acc = acc
-    tp ((FunDef _ "main" [] body) : funs) acc = tp funs $ cross (const $ Just $ translate c body) id acc
+    --tp ((FunDef _ "main" [] body) : funs) acc = tp funs $ cross (const $ Just $ translate c body) id acc
     tp ((FunDef _ name args body) : funs) (_, env) =
       let env' = Map.insert name (VClosure env' args $ translate c body) env in
-      tp funs (if name == "main" then Just $ translate c body else Nothing, env')
+      tp funs (if name == "main" then Just . ioHandler $ translate c body else Nothing, env')
+
+ioHandler :: MExpr -> MExpr
+ioHandler e = MHandle "IO" e $ Map.fromList
+  [("return", MClause ["x"] $ MVar "x"),
+   ("GetLine", MClause [] $ MApp (MVar "resume") (MTuple [MOp GetLine (MTuple [])])),
+   ("ReadLnInt", MClause [] $ MApp (MVar "resume") (MTuple [MOp ReadLnInt (MTuple [])])),
+   ("PutStrLn", MClause ["s"] $ MApp (MVar "resume") (MTuple [MOp Print (MTuple [MVar "s"])])),
+   ("PrintInt", MClause ["x"] $ MApp (MVar "resume") (MTuple [MOp Print (MTuple [MVar "x"])]))]

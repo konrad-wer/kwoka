@@ -145,8 +145,8 @@ inferFunDef eff c (FunDef p name args body)
   | otherwise = do
     ta <- mapM (const (TVar . T <$> freshVar)) args
     let c2 = foldr (uncurry Map.insert) c $ zip args $ map (TypeScheme []) ta
-    tr <- TVar . T <$> freshVar
-    r <-  if name == "main" then return EffEmpty else EffVar . E <$> freshVar
+    tr <-  if name == "main" then return $ TProduct [] else TVar . T <$> freshVar
+    r <-  if name == "main" then return (EffLabel "IO" EffEmpty) else EffVar . E <$> freshVar
     let t = TArrow (TProduct ta) r tr
     s <- check eff (Map.insert name (TypeScheme [] t) c2) body tr r
     return $ generalize (apply s c) $ apply s t

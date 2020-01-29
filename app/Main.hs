@@ -6,6 +6,7 @@ import Preliminary
 import TypeInference
 import Translate
 import Machine
+import Control.Monad (void)
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
 
@@ -34,4 +35,4 @@ main = do
                   putStrLn "\n\n"
                   case translateProgram typeEnv funs of
                     (Nothing, _) -> return ()
-                    (Just prog, env) -> print $ eval prog env [] []
+                    (Just prog, env) -> void $ eval prog env [] []

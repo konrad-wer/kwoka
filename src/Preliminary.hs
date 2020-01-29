@@ -92,9 +92,18 @@ getFuns defs =
     filterFuns (DefFun f : dfs) = f : filterFuns dfs
     filterFuns (_ : dfs) = filterFuns dfs
 
-buildProgram :: [TopLevelDef p] -> Either (PreliminaryError p) ([FunDef p], EffectEnv p, TypeEnv)
+ioEffectDef :: EffectDef SourcePos
+ioEffectDef =
+  let pos = initialPos "io.kwoka" in
+  EffectDef pos "IO"
+    [ActionDef pos "GetLine" [] (Just TString),
+     ActionDef pos "ReadLnInt" [] (Just TInt),
+     ActionDef pos "PutStrLn" [TString] (Just $ TProduct []),
+     ActionDef pos "PrintInt" [TInt] (Just $ TProduct [])]
+
+buildProgram :: p ~ SourcePos => [TopLevelDef p] -> Either (PreliminaryError p) ([FunDef p], EffectEnv p, TypeEnv)
 buildProgram defs = do
   funs <- getFuns defs
-  effectEnv <- buildEffectEnv defs
-  typeEnv <- buildTypeEnv defs
+  effectEnv <- buildEffectEnv (defs ++ [DefEff ioEffectDef])
+  typeEnv <- buildTypeEnv (DefEff ioEffectDef : defs)
   return (funs, effectEnv, typeEnv)
