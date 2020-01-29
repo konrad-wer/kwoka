@@ -16,14 +16,24 @@ fn sublist(xs)
         sublist(xs)
 }
 
+fn iter(f, xs)
+{
+  case xs of
+    [] => ()
+    x : xs => let () = f(x) in iter(f, xs)
+}
+
 /*
   Generating all sublists of the given list.
 */
 fn main()
 {
-  handle<Toss>(sublist([1,2,3,4,5]))
+  let res = handle<Toss>(sublist([1,2,3,4,5]))
   {
     return(x) => [x],
     Coin() => resume(True) @ resume(False)
   }
+  in
+
+  iter (fn (xs) => let () = iter(fn (x) => PrintInt(x) , xs) in PutStrLn(""), res)
 }

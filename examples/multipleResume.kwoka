@@ -13,11 +13,13 @@ effect Multi
 
 fn main()
 {
-  handle<Multi>(foo(45))
+  let res = handle<Multi>(foo(45))
   {
     return(x) => x,
     DoubleString() => resume("Bestrafer ist besser") * resume("It really is"),
     TripleInt() => resume(1) + resume(2) + resume(4),
     SingleFun(c) => resume(fn (x, y) => x * c + y)
   }
+
+  in PrintInt(res)
 }

@@ -20,7 +20,15 @@ fn quicksort(xs)
       quicksort(smaller) @ p : quicksort(greater)
 }
 
+fn iter(f, xs)
+{
+  case xs of
+    [] => ()
+    x : xs => let () = f(x) in iter(f, xs)
+}
+
 fn main()
 {
-  quicksort([45,44,57,42,59,11,2,1,1024,123])
+  let res = quicksort([45,44,57,42,59,11,2,1,1024,123]) in
+  iter(fn (x) => PrintInt(x), res)
 }

@@ -17,5 +17,5 @@ fn foo()
 fn main()
 {
   let p = foo() in
-  fst(p) + snd(p)
+  PrintInt(fst(p) + snd(p))
 }

@@ -13,9 +13,10 @@ fn saveDiv(n, m)
 
 fn main()
 {
-  handle<Exc>(saveDiv(4, 0))
+  let y = ReadLnInt() in
+  handle<Exc>(saveDiv(400, y))
   {
-    return(x) => x,
-    Raise(s) => 0
+    return(x) => PrintInt(x),
+    Raise(s) => PutStrLn("Division by zero")
   }
 }

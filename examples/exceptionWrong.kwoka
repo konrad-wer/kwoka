@@ -11,7 +11,7 @@ fn saveDiv(n, m)
     n / m
 }
 
-fn main()
+fn foo()
 {
   handle<Exc>(saveDiv(4, 5))
   {

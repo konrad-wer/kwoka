@@ -8,5 +8,5 @@ fn fib(n)
 
 fn main()
 {
-  fib(19)
+  PrintInt(fib(19))
 }
