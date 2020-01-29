@@ -26,7 +26,7 @@ data Expr p
   | EApp      p (Expr p) (Expr p)
   | EIf       p (Expr p) (Expr p) (Expr p)
   | ELet      p Var (Expr p) (Expr p)
-  | EAction   p Var (Expr p)
+  | EOp       p Var (Expr p)
   | EHandle   p Var (Expr p) [Clause p]
   | ETuple    p [Expr p]
   | ELetTuple p [Var] (Expr p) (Expr p)
@@ -162,7 +162,7 @@ showExpr indent = (showIndent indent ++) . s indent
     s i (ELetTuple _ xs e1 e2) =
       "let " ++ addParens (intercalate ", " xs) ++ " = " ++ s i e1 ++ " in\n" ++
       showIndent i ++ s i e2
-    s i (EAction _ a e) = a ++ s i e
+    s i (EOp _ a e) = a ++ s i e
     s i (EHandle _ effName e cs) = "handle<" ++ effName ++ ">(" ++ s i e ++ ")\n" ++
       showIndent i ++ "{\n" ++
       intercalate ",\n" (sc (i + 1) <$> cs) ++ "\n" ++
@@ -184,7 +184,7 @@ getPos (EApp      p _ _) = p
 getPos (EIf       p _ _ _) = p
 getPos (ELet      p _ _ _) = p
 getPos (ELetTuple p _ _ _) = p
-getPos (EAction   p _ _) = p
+getPos (EOp   p _ _) = p
 getPos (EHandle   p _ _ _) = p
 getPos (ETuple    p _) = p
 getPos (ECase     p _ _ _ _) = p

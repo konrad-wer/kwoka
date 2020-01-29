@@ -128,7 +128,7 @@ expr = makeExprParser eTerm operators
 eTerm :: Parser (Expr SourcePos)
 eTerm =
   try eApp <|>
-  try eAction <|>
+  try eOp <|>
   eIf <|>
   eCase <|>
   try eLet <|>
@@ -218,8 +218,8 @@ eList = do
   es <- brackets (sepBy expr comma)
   return $ foldr (EBinOp pos (BinOp ":")) (ENil pos) es
 
-eAction :: Parser (Expr SourcePos)
-eAction = EAction <$> getSourcePos <*> upperIdentifier <*> eTuple
+eOp :: Parser (Expr SourcePos)
+eOp = EOp <$> getSourcePos <*> upperIdentifier <*> eTuple
 
 eHandle :: Parser (Expr SourcePos)
 eHandle = do

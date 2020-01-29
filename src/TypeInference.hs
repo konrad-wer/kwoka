@@ -206,7 +206,7 @@ infer eff c (ETuple p elems) = do
       (t, r, s) <- infer effEnv (apply sPrev c) e
       let s' = s `compose` sPrev
       inferElems effEnv s' (acc ++ [(apply s' t, apply s' r)]) es
-infer eff c (EAction p name e) =
+infer eff c (EOp p name e) =
   case Map.lookup name c of
     Nothing -> inferError $ UndeclaredActionError p name
     Just scheme -> do

@@ -16,7 +16,7 @@ envLookup = flip (Map.!)
 envInsert ::  MVar -> MValue -> RuntimeEnv -> RuntimeEnv
 envInsert = Map.insert
 
-data MOp
+data MPrim
   = Not | Neg | Mult | Div | Mod | Add | Sub | Concat | Cons | Append | Equal | NotEqual
   | LessEqual | GreaterEqual | Less | Greater | And | Or | Print | GetLine | ReadLnInt deriving (Show, Eq)
 
@@ -61,14 +61,20 @@ data MExpr
   | MString String
   | MNil
   | MTuple  [MExpr]
-  | MOp     MOp MExpr
+  | MPrim   MPrim MExpr
   | MLambda [MVar] MExpr
   | MApp    MExpr MExpr
   | MIf     MExpr MExpr MExpr
-  | MAction MVar MVar MExpr
+  | MOp MVar MVar MExpr
   | MCase   MExpr MExpr (MVar, MVar) MExpr
   | MHandle MVar MExpr (Map.Map MVar MClause)
   deriving (Show, Eq)
+
+instance Ord MExpr where
+  (<=) (MBool b1) (MBool b2) = b1 <= b2
+  (<=) (MInt n1) (MInt n2) = n1 <= n2
+  (<=) (MString s1) (MString s2) = s1 <= s2
+  (<=) _ _ = False
 
 data MClause = MClause [MVar] MExpr deriving (Show, Eq)
 
@@ -78,8 +84,8 @@ getHandler = flip (Map.!)
 data MFrame
   = FArg RuntimeEnv MExpr
   | FClosure RuntimeEnv [MVar] MExpr
-  | FAction MVar MVar
-  | FOp MOp
+  | FOp MVar MVar
+  | FPrim MPrim
   | FTuple RuntimeEnv [MValue] [MExpr]
   | FIf RuntimeEnv MExpr MExpr
   | FCase RuntimeEnv MExpr (MVar, MVar) MExpr
