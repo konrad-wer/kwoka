@@ -6,6 +6,8 @@ import Preliminary
 import TypeInference
 import Translate
 import Machine
+import Data.List
+import Data.Maybe
 import Control.Monad
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
@@ -34,7 +36,7 @@ parseArgs xs = do
 
 main :: IO ()
 main = do
-  (filename, args) <- parseArgs . tail =<< getArgs
+  (filename, args) <- parseArgs . snd .fromMaybe ("", []) . uncons =<< getArgs
   if "-help" `elem` args then
     printHelp
   else do
