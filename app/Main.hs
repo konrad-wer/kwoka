@@ -36,7 +36,7 @@ parseArgs xs = do
 
 main :: IO ()
 main = do
-  (filename, args) <- parseArgs . snd .fromMaybe ("", []) . uncons =<< getArgs
+  (filename, args) <- parseArgs . snd . fromMaybe ("", []) . uncons =<< getArgs
   if "-help" `elem` args then
     printHelp
   else do
