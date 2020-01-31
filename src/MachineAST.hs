@@ -96,6 +96,8 @@ data MFrame
 
 type Stack = [MFrame]
 
-data MMetaFrame = MMetaFrame (MVar, Map.Map MVar MClause, RuntimeEnv) Stack deriving (Show, Eq)
+data MMetaFrame
+  = MMetaFrame (MVar, Map.Map MVar MClause, RuntimeEnv) Stack
+  deriving (Show, Eq)
 
 type MetaStack = [MMetaFrame]
