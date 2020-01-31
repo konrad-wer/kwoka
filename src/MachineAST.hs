@@ -57,19 +57,19 @@ instance Ord MValue where
   (<=) _ _ = False
 
 data MExpr
-  = MVar    MVar
-  | MInt    Integer
-  | MBool   Bool
-  | MString String
+  = MVar     MVar
+  | MInt     Integer
+  | MBool    Bool
+  | MString  String
   | MNil
-  | MTuple  [MExpr]
-  | MPrim   MPrim MExpr
-  | MLambda [MVar] MExpr
-  | MApp    MExpr MExpr
-  | MIf     MExpr MExpr MExpr
+  | MTuple   [MExpr]
+  | MPrim    MPrim MExpr
+  | MLambda  [MVar] MExpr
+  | MApp     MExpr MExpr
+  | MIf      MExpr MExpr MExpr
   | MOp MVar MVar MExpr
-  | MCase   MExpr MExpr (MVar, MVar) MExpr
-  | MHandle MVar MExpr (Map.Map MVar MClause)
+  | MCase    MExpr MExpr (MVar, MVar) MExpr
+  | MHandle  MVar MExpr (Map.Map MVar MClause)
   deriving (Show, Eq)
 
 instance Ord MExpr where
