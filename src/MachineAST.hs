@@ -17,8 +17,10 @@ envInsert ::  MVar -> MValue -> RuntimeEnv -> RuntimeEnv
 envInsert = Map.insert
 
 data MPrim
-  = Not | Neg | Mult | Div | Mod | Add | Sub | Concat | Cons | Append | Equal | NotEqual
-  | LessEqual | GreaterEqual | Less | Greater | And | Or | Print | GetLine | ReadLnInt deriving (Show, Eq)
+  = Not | Neg | Mult | Div | Mod | Add | Sub
+  | Concat | Cons | Append | Equal | NotEqual
+  | LessEqual | GreaterEqual | Less | Greater
+  | And | Or | Print | GetLine | ReadLnInt deriving (Show, Eq)
 
 data MValue
   = VInt Integer
