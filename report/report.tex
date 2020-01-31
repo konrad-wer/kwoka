@@ -13,6 +13,12 @@
 \usepackage{mathtools, array, mathpartir, amssymb, stmaryrd, cancel, cleveref, fancyvrb}
 \usepackage[nofoot,hdivide={2cm,*,2cm},vdivide={2cm,*,2cm}]{geometry}
 \frenchspacing
+\pagenumbering{gobble}
+
+\newenvironment{grammar}[2]
+ {\begin{tabular}{@{\qquad}>{$}l<{$}@{\qquad}l@{}}
+  \multicolumn{1}{@{}l@{}}{$#1$}&\multicolumn{1}{l@{}}{\hspace{-2em}#2}\\}
+ {\end{tabular}}
 
 \author{Konrad Werbliński - 291878}
 \title{Programming languages - final project}
@@ -36,13 +42,10 @@ approach for handling side effects than monads.
 
 We introduce Kwoka - stripped down and simplified version of the Koka language \cite{Koka}.
 In this report we describe our work on implementation of the
-type inference for algebraic effects introduced
-in the article by Daan Leijen \cite{leijen2017type}.
-We follow his approach of using extensible rows with
-scoped labels for tracking effects of computations.
+type inference \cite{leijen2017type} and abstract machine \cite{HandleWithCare} for algebraic effects.
 
-In this report we specify our variant of a language. We describe the
-details of the implemented type system.
+In the next section we specify our variant of a language. We describe the
+details of the implemented type system and abstract machine.
 Then, we give an overview of the implementation and instructions for building and running Kwoka.
 Finally we discuss further work on this project.
 
@@ -66,38 +69,31 @@ Kwoka supports higher order functions and let-polymorphism
 \begin{verbatim}
 fn compose(f, g)
 {
-  \x => f(g(x))
+  fn (x) => f(g(x))
+}
+\end{verbatim}
+The language also features product and list types.
+\begin{verbatim}
+fn fst(p)
+{
+  let (x, y) = p in x
+}
+
+fn map(f, xs)
+{
+  case xs of
+    [] => []
+    x : xs => f(xs) : map(f, xs)
 }
 \end{verbatim}
 \subsection*{Algebraic effects}
 The key feature of the Kwoka language are algebraic effects.
 Effects are defined as the top level definitions. In the definition we specify possible
-actions for that effect. For simplicity types of actions are not polymorphic.
-For handling the effects we the use \verb+handle+ expression.
+operations for that effect. For simplicity types of operations are not polymorphic.
+For handling the effects we use \verb+handle+ expression.
 Inside the \verb+handle+ expression programmer has to provide ways of handling all of the
-effect's actions and handling of the return value of the effectful computation.
-\begin{verbatim}
-effect Hello
-{
-  Hello() :: String
-}
-
-fn makeGreeting(name)
-{
-  Hello() ^ " " ^ name
-}
-
-fn main()
-{
-  handle<Hello>(makeGreeting("General Kenobi."))
-  {
-    return(x) => (),
-    Hello() => resume("Hello there!")
-  }
-}
-\end{verbatim}
-
-Popular example of usage of the algebraic effects is using them to
+effect's operations and handling of the return value of the effectful computation.
+Popular example of usage of algebraic effects is using them to
 express exceptions. Thus, they don't have to be part of the language anymore.
 
 \begin{verbatim}
@@ -116,22 +112,81 @@ fn saveDiv(n, m)
 
 fn main()
 {
-  handle<Exc>(saveDiv(4, 5))
+  let y = ReadLnInt() in
+  handle<Exc>(saveDiv(400, y))
   {
-    return(x) => x,
-    Raise(s) => 0
+    return(x) => PrintInt(x),
+    Raise(s) => PutStrLn("Division by zero")
   }
 }
 \end{verbatim}
+Algebraic effects can be also used for simulating computations with nondeterminism.
+In the example below we define effect that represents the coin toss. Then, in the handler of that effect
+we use multiple resumptions to generate all sublists of the list.
+\begin{verbatim}
+effect Toss
+{
+  Coin() :: Bool
+}
+
+fn sublist(xs)
+{
+  case xs of
+    [] => []
+    x : xs =>
+      if Coin() then
+        x : sublist(xs)
+      else
+        sublist(xs)
+}
+
+fn main()
+{
+  let res = handle<Toss>(sublist([1,2,3,4,5]))
+  {
+    return(x) => [x],
+    Coin() => resume(True) @ resume(False)
+  } in
+
+  iter (fn (xs) => let () = iter(fn (x) => PrintInt(x) , xs) in PutStrLn(""), res)
+}
+\end{verbatim}
+Kwoka provides default definition and handler for the IO effect,
+which consists of following operations:
+\verb+GetLine+, \verb+ReadLnInt+, \verb+PutStrLn+, \verb+PrintInt+.
 
 \subsection*{Definition scope}
 Top level functions are visible to themselves and functions below them.
 Effect definitions are visible in the entire source file.
 
 \section{Type Inference}
-Kwoka uses the Hindley-Milner type system \cite{Hindley, Milner} extended for handling
-inference of the effects. Effects are represented as extensible rows with
-scoped labels. This concept of extensible rows was originally proposed for implementing
+\textbf{Types:}
+
+\begin{grammar}{\tau\Coloneqq}{}
+  \verb+Bool+ \mid \verb+Int+ \mid \verb+String+               & simple types\\
+  \mid  (\tau_1, \tau_2, \dots \tau_n)                         & product\\
+  \mid [\tau]                                                  & lists\\
+  \mid \tau_1 \rightarrow \langle \epsilon \rangle \tau_2      & arrows\\
+  \mid \alpha                                                  & type variable
+\end{grammar}\bigskip\\
+
+\textbf{Type schemes:}
+
+\begin{grammar}{\sigma\Coloneqq}{}
+  \forall \overline\alpha.\, \tau
+\end{grammar}\bigskip\\
+
+\textbf{Effect types}
+
+\begin{grammar}{\epsilon\Coloneqq}{}
+  \langle l \mid \epsilon \rangle              & label\\
+  \mid \mu                                     & effect variable\\
+  \mid \langle \rangle                         & empty effect row
+\end{grammar}\bigskip\\
+
+Kwoka uses the Hindley-Milner type system \cite{Hindley, Milner} extended for algebraic effects.
+We follow Daan Leijen's \cite{leijen2017type} approach of using extensible rows with
+scoped labels for effect tracking. The concept of extensible rows was originally proposed for implementing
 extensible records with scoped labels \cite{leijen2005extensible}, however they fit very
 well for tracking the effects of computations.
 
@@ -159,22 +214,108 @@ well for tracking the effects of computations.
              \Gamma, x : \tau \vdash e_r : \tau_r \mid \epsilon \\
              \Gamma \vdash op_i : \tau_i \rightarrow \langle l \rangle \tau_i' \mid \langle \rangle \\
              \Gamma, \mathit{resume} : \tau_i' \rightarrow \epsilon \, \tau_r, x_i : \tau_i \vdash e_i : \tau_r \mid \epsilon}
-            {\Gamma \vdash \textbf{handle}(e)\{op_1(x_1) \rightarrow e_1; \, \dots; \, op_n(x_n) \rightarrow e_n; \,
+            {\Gamma \vdash \textbf{handle$\langle l\rangle$}(e)\{op_1(x_1) \rightarrow e_1; \, \dots; \, op_n(x_n) \rightarrow e_n; \,
              \mathbf{return}(x) \rightarrow e_r \} : \tau_r \mid \epsilon}
 \end{mathpar}
 
 \vspace{1cm}
 
 We use the unification algorithm described in the Leijen's
-article about extensible records \cite{leijen2005extensible}.
-
-\vspace{2cm}
-
+article \cite{leijen2005extensible}.
+We omit the unification rules for product and list types, since they are straightforward.
 \begin{center}
-  \large TODO Unification rules
+  $c \Coloneqq$ \verb+Bool+ $\mid$ \verb+Int+ $\mid$ \verb+String+
 \end{center}
+\begin{mathpar}
+  \inferrule{}
+            {c \sim c: []} \and
+  \inferrule{}
+            {\alpha \sim \alpha: []} \and
+  \inferrule{\alpha \notin \mathrm{ftv}(\tau)}
+            {\alpha \sim \tau: [\alpha \mapsto \tau]} \and
+  \inferrule{\alpha \notin \mathrm{ftv}(\tau)}
+            {\tau \sim \alpha : [\alpha \mapsto \tau]} \and
+  \inferrule{\tau_1 \sim \tau_1' : \Theta_1 \\
+             \Theta_1\epsilon \sim \Theta_1\epsilon' : \Theta_2 \\
+             (\Theta_2 \circ \Theta_1)\tau_2 \sim (\Theta_2 \circ \Theta_1)\tau_2' : \Theta_3}
+            {\tau_1 \rightarrow \langle \epsilon \rangle \tau_2 \sim
+             \tau_1' \rightarrow \langle \epsilon' \rangle \tau_2': \Theta_3 \circ \Theta_2 \circ \Theta_1} \and
+  \inferrule{}
+             {\langle\rangle \sim \langle\rangle: []} \and
+  \inferrule{}
+             {\mu \sim \mu: []} \and
+  \inferrule{\mu \notin \mathrm{ftv}(\epsilon)}
+             {\mu \sim \epsilon: [\mu \mapsto \epsilon]} \and
+  \inferrule{\mu \notin \mathrm{ftv}(\epsilon)}
+             {\epsilon \sim \mu : [\mu \mapsto \epsilon]} \and
+  \inferrule{\epsilon_2 \simeq \langle l \mid \epsilon_2' \rangle : \Theta_1 \\
+            \mathrm{tail}(\epsilon_1) \notin \mathrm{dom}(\Theta_1) \\
+            \Theta_1 \epsilon_1 \sim \Theta_1 \epsilon_2' : \Theta_2}
+            {\langle l \mid \epsilon_1 \rangle \sim \epsilon_2 : \Theta_2 \circ \Theta_1}
+\end{mathpar}
 
-\vspace{2cm}
+\begin{mathpar}
+  \inferrule{}
+            {\langle l \mid \epsilon \rangle \simeq \langle l \mid \epsilon \rangle: []} \and
+  \inferrule{l \neq l' \\
+             \epsilon \simeq \langle l \mid \epsilon' \rangle: \Theta}
+            {\langle l' \mid \epsilon \rangle \simeq \langle l \mid  l' \mid \epsilon' \rangle: \Theta} \and
+  \inferrule{\mathrm{fresh}(\mu')}
+            {\mu \simeq \langle l \mid \mu' \rangle : [\mu \mapsto \langle l \mid \mu' \rangle]}
+\end{mathpar}
+
+\section{Abstract machine}
+We implemented slightly modified version of the abstract machine introduced by
+Dariusz Biernacki, Maciej Piróg, Piotr Polesiuk and Filip Sieczkowski \cite{HandleWithCare}.
+$$e \Rightarrow \langle e, \{\}, \bullet, \bullet \rangle_{eval} $$
+
+$$\langle x, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+  \langle \kappa, v, \pi \rangle_\mathit{stack} \; \text{where} \; v = \rho(x)$$
+$$\langle \lambda x.e, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+  \langle \kappa, \lambda^\rho x.e, \pi \rangle_\mathit{stack}$$
+$$\langle (), \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+  \langle \kappa, (), \pi \rangle_\mathit{stack}$$
+$$\langle (e_1, e_2, \dots, e_n), \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+   \langle e_1, \rho, \{() (e_2, \dots, e_n) \}^\rho : \kappa, \pi \rangle_\mathit{eval}$$
+$$\langle \mathit{op}_l, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow \langle \kappa, \mathit{op}_l, \pi \rangle_\mathit{stack}$$
+$$\langle e_1 e_2, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+   \langle e_1, \rho, e_2^\rho : \kappa, \pi \rangle_\mathit{eval}$$
+$$\langle \mathit{primitive}, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+  \langle \kappa, \mathit{primitive}, \pi \rangle_\mathit{stack}$$
+$$\langle \textbf{handle$\langle l\rangle$}(e)\{\mathit{hr}\}, \rho, \kappa, \pi \rangle_\mathit{eval} \Rightarrow
+  \langle e, \rho, \bullet, (\mathit{hr}_l^\rho, \kappa) : \pi \rangle_\mathit{eval}$$
+
+$$\langle \bullet, v, \pi \rangle_\mathit{stack} \Rightarrow \langle \pi, v \rangle_\mathit{mstack}$$
+$$\langle e^\rho : \kappa, v, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle e, \rho, v : \kappa, \pi \rangle_\mathit{eval}$$
+$$\langle \{(v_1, \dots, v_{n-1})()\}^\rho : \kappa, v_n, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle \kappa, (v_1, \dots, v_{n-1}, v_n), \pi \rangle_\mathit{stack}$$
+$$\langle \{(v_1, \dots, v_{k-1})(e_{k+1}, e_{k+2}, \dots, e_n)\}^\rho : \kappa, v_k, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle e_{k+1}, \rho, \{(v_1, \dots, v_{k-1}, v_k) (e_{k+2}, \dots, e_n) \}^\rho : \kappa, \pi \rangle_\mathit{eval}$$
+$$\langle \lambda^\rho x.e : \kappa, v, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle e, \rho\{x \mapsto v\}, \kappa, \pi \rangle_\mathit{eval}$$
+$$\langle \mathit{primitive} : \kappa, v, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle \kappa, v', \pi \rangle_\mathit{stack}  \; \text{where} \; v' = \llbracket \mathit{primitive} \; v \rrbracket$$
+$$\langle \mathit{op}_l : \kappa, v, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle \mathit{op}_l, \kappa, \pi, v, \bullet \rangle_\mathit{op}$$
+$$\langle \theta : \kappa, v, \pi \rangle_\mathit{stack} \Rightarrow
+  \langle \theta , \kappa, \pi, v \rangle_\mathit{res}$$
+
+$$\langle \mathit{op}_l, \kappa, (\mathit{\{h;d\}}_l^\rho, \kappa') : \pi, v, \theta \rangle_\mathit{op} \Rightarrow
+   \langle e, \rho\{x \mapsto v\}\{r \mapsto (\mathit{\{h;d\}}_l^\rho, \kappa) : \theta\}, \kappa', \pi \rangle_\mathit{eval}
+   \; \text{where} \; op \, x,\, r.e \in h$$
+$$\langle \mathit{op}_l, \kappa, (\mathit{hr}_{l'}^\rho, \kappa') : \pi, v, \theta \rangle_\mathit{op} \Rightarrow
+  \langle \mathit{op}_l, \kappa', \pi, v, (\mathit{hr}_{l'}^\rho, \kappa) : \theta \rangle_\mathit{op}
+   \; \text{if} \; l \neq l'$$
+
+$$\langle \bullet, \kappa, \pi, v \rangle_\mathit{res} \Rightarrow
+  \langle \kappa, v, \pi \rangle_\mathit{stack}$$
+$$\langle (\mu, \kappa') : \theta, \kappa, \pi, v \rangle_\mathit{res} \Rightarrow
+  \langle \theta, \kappa', (\mu, \kappa) : \pi, v \rangle_\mathit{res}$$
+
+$$ \langle (\{h; \mathbf{return}(x).\,e\}_l^\rho, \kappa) : \pi, v \rangle_\mathit{mstack} \Rightarrow
+   \langle e, \rho\{x \mapsto v\}, \kappa, \pi \rangle_\mathit{eval}$$
+$$ \langle \bullet, v \rangle_\mathit{mstack} \Rightarrow v$$
 
 \section{Implementation}
 Kwoka is implemented in Haskell, as we believe this language has cleaner syntax and
@@ -183,16 +324,62 @@ more elegant way of handling effectful computations than other mainstream functi
 
 \subsubsection*{AST}
 In the AST module we define types to describe syntax of the expressions,
-effect definitions and types. Moreover, we provide pretty printing algorithm
+effect definitions and types. Moreover, we provide pretty-printing algorithm
 by making all of the above mentioned data types instances of the \verb+Show+ type class.
-
+\begin{itemize}
+\item Expressions:
+\begin{verbatim}
+data Expr p
+  = EVar      p Var
+  | EBool     p Bool
+  | EInt      p Integer
+  | EString   p String
+  | ENil      p
+  | EUnOp     p UnOp (Expr p)
+  | EBinOp    p BinOp (Expr p) (Expr p)
+  | ELambda   p [Var] (Expr p)
+  | EApp      p (Expr p) (Expr p)
+  | EIf       p (Expr p) (Expr p) (Expr p)
+  | ELet      p Var (Expr p) (Expr p)
+  | EOp       p Var (Expr p)
+  | EHandle   p Var (Expr p) [Clause p]
+  | ETuple    p [Expr p]
+  | ELetTuple p [Var] (Expr p) (Expr p)
+  | ECase     p (Expr p) (Expr p) (Var, Var) (Expr p)
+\end{verbatim}
+\item Types:
+\begin{verbatim}
+data Type
+  = TVar TypeVar
+  | TBool
+  | TInt
+  | TString
+  | TList Type
+  | TProduct [Type]
+  | TArrow Type EffectRow Type
+  deriving Eq
+\end{verbatim}
+\item Type schemes:
+\begin{verbatim}
+data TypeScheme = TypeScheme [TypeVar] Type
+\end{verbatim}
+\item Effect rows:
+\begin{verbatim}
+data EffectRow
+  = EffLabel Var EffectRow
+  | EffEmpty
+  | EffVar TypeVar
+  deriving Eq
+\end{verbatim}
+\end{itemize}
 \subsubsection*{Parser}
 For parsing we use the megaparsec library,
 which is an extended and improved version of the popular parsec library for monadic parsing.
 
 \subsubsection*{Preliminary}
 After the parsing phase we move to preliminary phase, where type and effect environments
-are built from the effect definitions.
+are built from the effect definitions. In this module we also check the well-formedness of the definitions
+and define the types of the builtin operators.
 
 \subsubsection*{Type inference}
 In the type inference module we implement the Hindley-Milner type inference algorithm extended
@@ -201,13 +388,104 @@ monads, used for fresh variable names generating and type error signaling. Aside
 module we define type for representing type errors and we make it an instance of the \verb+Show+
 type class for converting them into the human readable form.
 
+\begin{itemize}
+  \item \verb+infer+ - main function of the inference algorithm, infers the types of expressions.
+  \item \verb+check+ - helper function that infers expression type and then unifies it with a given type.
+  \item \verb+unify+ - unification of types.
+  \item \verb+unifyRow+ - unification of effect rows.
+\end{itemize}
+
+\subsubsection*{MachineAST}
+In the MachineAST module we define types that represent expressions in the abstract machine language.
+We define primitive operations which represent unary and binary operators and IO operations
+(used for implementation of the default IO effect handler, which is written in the abstract machine code).
+In this module we also define data structures necessary for the machine to work, such as stack frames and values.
+
+\begin{itemize}
+\item Machine expressions:
+\begin{verbatim}
+data MExpr
+  = MVar     MVar
+  | MInt     Integer
+  | MBool    Bool
+  | MString  String
+  | MNil
+  | MTuple   [MExpr]
+  | MPrim    MPrim MExpr
+  | MLambda  [MVar] MExpr
+  | MApp     MExpr MExpr
+  | MIf      MExpr MExpr MExpr
+  | MOp MVar MVar MExpr
+  | MCase    MExpr MExpr (MVar, MVar) MExpr
+  | MHandle  MVar MExpr (Map.Map MVar MClause)
+  deriving (Show, Eq)
+\end{verbatim}
+\item Primitive operations:
+\begin{verbatim}
+data MPrim
+  = Not | Neg | Mult | Div | Mod | Add | Sub
+  | Concat | Cons | Append | Equal | NotEqual
+  | LessEqual | GreaterEqual | Less | Greater
+  | And | Or | Print | GetLine | ReadLnInt deriving (Show, Eq)
+\end{verbatim}
+\item Values:
+\begin{verbatim}
+data MValue
+  = VInt Integer
+  | VBool Bool
+  | VString String
+  | VList [MValue]
+  | VTuple [MValue]
+  | VClosure RuntimeEnv [MVar] MExpr
+  | VReifiedMetaStack MetaStack
+\end{verbatim}
+\item Stack frames:
+\begin{verbatim}
+data MFrame
+  = FArg RuntimeEnv MExpr
+  | FClosure RuntimeEnv [MVar] MExpr
+  | FOp MVar MVar
+  | FPrim MPrim
+  | FTuple RuntimeEnv [MValue] [MExpr]
+  | FIf RuntimeEnv MExpr MExpr
+  | FCase RuntimeEnv MExpr (MVar, MVar) MExpr
+  | FReifiedMetaStack MetaStack
+  deriving (Show, Eq)
+\end{verbatim}
+\item Meta-stack frames:
+\begin{verbatim}
+data MMetaFrame
+  = MMetaFrame (MVar, Map.Map MVar MClause, RuntimeEnv) Stack
+  deriving (Show, Eq)
+\end{verbatim}
+\end{itemize}
+
+\subsubsection*{Translate}
+In this module we implement translation algorithm between abstract syntax and machine code.
+During this translation we also perform basic constant folding.
+
+\begin{itemize}
+  \item \verb+translate+ - translates expressions to machine expressions.
+  \item \verb+binOpToMPrim+ - translates binary operators to primitive operations.
+  \item \verb+ioHandler+ - implementation of the default IO handler,
+              which is placed over the main function.
+\end{itemize}
+
+\subsubsection*{Machine}
+In this module we define five functions which correspond to five configurations of the abstract machine.
+We use the IO monad to implement primitive operations for input-output.
+\begin{itemize}
+  \item \verb+eval :: MExpr -> RuntimeEnv -> Stack -> MetaStack -> IO MValue+
+  \item \verb+stack :: Stack -> MValue -> MetaStack -> IO MValue+
+  \item \verb+op :: (MVar, MVar) -> Stack -> MetaStack -> MValue -> MetaStack -> IO MValue+
+  \item \verb+resume :: MetaStack -> Stack -> MetaStack -> MValue -> IO MValue+
+  \item \verb+mstack :: MetaStack -> MValue -> IO MValue+
+\end{itemize}
+
 \subsubsection*{Main}
 
-In the main module we bind the algorithm together, handle reading the command line arguments and
-handle loading of the source file.
-
-Upon successful parsing and type checking, Kwoka pretty prints the parsed AST to the standard output.
-In the other case, it prints the human readable representation of the encountered error.
+In the main module we bind all of the implementation parts together, handle reading the command line arguments and
+handle loading the source file.
 
 \subsubsection*{Tests}
 In the \verb+test+ folder we provide over 85 unit tests for the type system.
@@ -215,19 +493,20 @@ In the \verb+test+ folder we provide over 85 unit tests for the type system.
 \section{Installing and running Kwoka}
 Kwoka requires {\href{https://docs.haskellstack.org/en/stable/README/}{\color{blue}stack}} for building.
 \begin{itemize}
-    \item Building: \verb+stack build+
-    \item Running: \verb+stack run yourSourceFile.kwoka+
-    \item Running unit tests: \verb+stack test+
+    \item Building: \verb+stack build+.
+    \item Running: \verb+stack run -- kwoka yourSourceFile.kwoka [-debug]+.
+    \item Adding \verb+-debug+ flag pretty-prints typed typed program to a file.
+    \item Running unit tests: \verb+stack test+.
+    \item To install kwoka on your machine: \verb+stack install+,
+          then you can run kwoka in your terminal by running \verb+kwoka-exe+.
 \end{itemize}
 In the \verb+example+ folder we provide a handful of examples of the Kwoka language.
 
 \section{Further work}
 \begin{itemize}
-  \item We plan to implement the evaluation and the type directed selective CPS translation described in the
-  second part of the Daan Leijen's article\cite{leijen2017type}.
-  \item Small and simple, but extremely useful extension would be addition of list and product
-  types.
-  \item Another useful feature would be inclusion of effect actions with polymorphic types.
+  \item We plan to implement the type directed selective CPS translation \cite{leijen2017type}
+        as a next step towards efficient programming language implementation.
+  \item Useful feature would be inclusion of effect operations with polymorphic types.
   \item We plan to refactor unit tests to use popular testing framework for Haskell: HUnit.
 \end{itemize}
 
