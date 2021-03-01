@@ -1,0 +1,33 @@
+effect State
+{
+  Get() :: Int
+  Put(Int) :: Int
+}
+
+fn randInt()
+{
+  let x = Get() in
+  Put((x * 2343 + 12333) % 1214567)
+}
+
+fn foo(n)
+{
+    if n == 0 then
+        ()
+    else
+        let dump = PrintInt(randInt()) in
+        foo(n - 1)
+}
+
+fn main()
+{
+  let runState = handle<State>(foo(15))
+  {
+    return(x) => (fn(s) => x),
+    Get() => fn (s) => resume(s)(s),
+    Put(x) => fn (s) => resume(x)(x)
+  } in
+  runState(44)
+}
+
+
