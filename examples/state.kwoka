@@ -12,11 +12,11 @@ fn randInt()
 
 fn foo(n)
 {
-    if n == 0 then
-        ()
-    else
-        let dump = PrintInt(randInt()) in
-        foo(n - 1)
+  if n == 0 then
+    ()
+  else
+    let dump = PrintInt(randInt()) in
+    foo(n - 1)
 }
 
 fn main()
