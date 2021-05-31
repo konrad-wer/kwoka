@@ -6,8 +6,6 @@ import Preliminary
 import TypeInference
 import Translate
 import Machine
-import Data.List
-import Data.Maybe
 import Control.Monad
 import System.Environment
 import Text.Megaparsec.Error (errorBundlePretty)
@@ -27,7 +25,7 @@ parseArgs :: [String] -> IO (String, [String])
 parseArgs xs = do
   let filenames = filter (not . isArg) xs
   let args = filter isArg xs
-  if length filenames /= 1 || any (not . flip elem ["-debug", "-help"]) args then do
+  if length filenames /= 1 || not (all (`elem` ["-debug", "-help"]) args) then do
     printHelp
     exitWith $ ExitFailure 1
   else
@@ -36,7 +34,7 @@ parseArgs xs = do
 
 main :: IO ()
 main = do
-  (filename, args) <- parseArgs . snd . fromMaybe ("", []) . uncons =<< getArgs
+  (filename, args) <- parseArgs =<< getArgs
   if "-help" `elem` args then
     printHelp
   else do
